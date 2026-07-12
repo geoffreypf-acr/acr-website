@@ -1,0 +1,101 @@
+/* ACR Automobile — Color tokens
+   Palette: NAVY · SILVER · ICE-CYAN. Surfaces are built on the ACR business-card navy
+   (#233446); type and neutral hairlines are cool silver (the card type + wordmark);
+   a luminous ice-cyan is the single accent and primary action colour — echoing
+   live GPS / tracking / signal. Navy-first, ultra-premium, high-contrast action. */
+
+:root {
+  /* ---- Navy (brand surface scale, anchored on the business-card navy #233446) ---- */
+  --navy-950: #121C26;   /* page base */
+  --navy-900: #1A2734;
+  --navy-850: #233446;   /* cards — the ACR business-card navy */
+  --navy-800: #2B3D50;
+  --navy-750: #34485D;
+  --navy-700: #40556C;
+  --navy-600: #526981;
+  --navy-500: #6B8099;
+  --navy-400: #8A9DB4;
+
+  /* Legacy aliases (kept so older references keep working) */
+  --graphite-950: var(--navy-950);
+  --graphite-900: var(--navy-900);
+  --graphite-850: var(--navy-850);
+  --graphite-800: var(--navy-800);
+  --graphite-750: var(--navy-750);
+  --graphite-700: var(--navy-700);
+  --graphite-600: var(--navy-600);
+  --graphite-500: var(--navy-500);
+  --graphite-400: var(--navy-400);
+
+  /* ---- Platinum / silver (cool neutrals; the logo + card type tone) ---- */
+  --platinum-50:  #F4F6F7;
+  --platinum-100: #E7EAEC;
+  --platinum-200: #D2D8DB;
+  --platinum-300: #B3BCC2;
+  --platinum-400: #93A0A7;   /* eyebrow / muted label — near logo silver */
+  --platinum-500: #72808A;
+  --platinum-600: #56616C;
+
+  /* ---- Signal accent (ICE-CYAN — the single accent; live / GPS / signal) ---- */
+  --signal-300: #8FD6EE;     /* light cyan — icons, links, read-more */
+  --signal-400: #57BBDF;
+  --signal-500: #2FA1CC;     /* brand cyan */
+  --signal-600: #2381A8;
+  --signal-700: #1A6480;
+
+  /* ---- Semantic hues ---- */
+  --secure-400: #57BBDF;   /* protected / verified — cyan-aligned */
+  --secure-500: #2FA1CC;
+  --warn-400:   #DFAE4E;   /* attention */
+  --warn-500:   #C9962F;
+  --alert-400:  #E0695B;   /* alert / breach / danger */
+  --alert-500:  #CB4E42;
+
+  /* ================= Semantic aliases ================= */
+
+  /* Surfaces */
+  --bg-base:        var(--navy-950);
+  --surface-1:      var(--navy-900);
+  --surface-2:      var(--navy-850);
+  --surface-card:   var(--navy-850);
+  --surface-raised: var(--navy-800);
+  --surface-inset:  var(--navy-900);
+  --surface-hover:  var(--navy-750);
+
+  /* Text */
+  --text-primary:   var(--platinum-50);
+  --text-secondary: var(--platinum-300);
+  --text-muted:     var(--platinum-500);
+  --text-disabled:  var(--navy-500);
+  --text-on-accent: #16222E;
+  --text-brand:     var(--platinum-400);
+
+  /* Lines & borders — cool silver hairlines */
+  --border-subtle:  rgba(180, 196, 210, 0.10);
+  --border-default: rgba(180, 196, 210, 0.16);
+  --border-strong:  rgba(180, 196, 210, 0.26);
+  --border-signal:  var(--signal-500);
+
+  /* Interactive */
+  --accent:         var(--signal-500);
+  --accent-hover:   var(--signal-400);
+  --accent-press:   var(--signal-600);
+  --accent-soft:    rgba(47, 161, 204, 0.15);
+  --focus-ring:     rgba(47, 161, 204, 0.55);
+
+  /* Cyan action (premium primary CTA — luminous ice-cyan) */
+  --silver-fill:    linear-gradient(180deg, #54BDE2 0%, #2FA1CC 100%);
+  --silver-fill-hover: linear-gradient(180deg, #6BCBEB 0%, #3DAFD8 100%);
+  --silver-ink:     #06141C;
+
+  /* Semantic surfaces (soft fills for badges/states) */
+  --secure-soft: rgba(47, 161, 204, 0.14);
+  --warn-soft:   rgba(223, 174, 78, 0.14);
+  --alert-soft:  rgba(224, 105, 91, 0.14);
+  --signal-soft: rgba(47, 161, 204, 0.14);
+
+  /* Light-on-light context (printed docs / quote sheets / blueprint) */
+  --paper:        #F2F5F7;
+  --paper-ink:    #16222E;
+  --paper-muted:  #556472;
+}

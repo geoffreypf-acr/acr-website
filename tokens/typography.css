@@ -1,0 +1,41 @@
+/* ACR Automobile — Typography tokens */
+
+:root {
+  /* Families */
+  --font-display: 'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif; /* bold editorial display, hero, numerals */
+  --font-body:    'DM Sans', system-ui, sans-serif; /* UI, body copy */
+  --font-mono:    'Space Mono', ui-monospace, monospace; /* spec labels, IDs, data */
+
+  /* Weights */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold:600;
+  --weight-bold:    700;
+  --weight-extra:   800;
+
+  /* Type scale (rem; 1rem = 16px) */
+  --text-display-xl: 4.5rem;   /* 72 — hero */
+  --text-display-l:  3.5rem;   /* 56 */
+  --text-display-m:  2.75rem;  /* 44 */
+  --text-h1: 2.25rem;          /* 36 */
+  --text-h2: 1.75rem;          /* 28 */
+  --text-h3: 1.375rem;         /* 22 */
+  --text-h4: 1.125rem;         /* 18 */
+  --text-body-lg: 1.0625rem;   /* 17 */
+  --text-body: 1rem;           /* 16 */
+  --text-body-sm: 0.875rem;    /* 14 */
+  --text-caption: 0.8125rem;   /* 13 */
+  --text-micro: 0.6875rem;     /* 11 — eyebrow / labels */
+
+  /* Line heights */
+  --leading-tight: 1.05;
+  --leading-snug:  1.2;
+  --leading-normal:1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter spacing — wide tracking on uppercase is a core brand motif */
+  --tracking-tight: 0.005em;  /* Bebas Neue is condensed — near-zero reads best */
+  --tracking-normal: 0;
+  --tracking-wide: 0.08em;
+  --tracking-eyebrow: 0.22em;  /* "A U T O M O B I L E" treatment */
+}

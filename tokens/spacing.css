@@ -1,0 +1,55 @@
+/* ACR Automobile — Spacing, radius, shadow, layout tokens */
+
+:root {
+  /* Spacing — 4px base grid */
+  --space-0: 0;
+  --space-1: 0.25rem;  /* 4 */
+  --space-2: 0.5rem;   /* 8 */
+  --space-3: 0.75rem;  /* 12 */
+  --space-4: 1rem;     /* 16 */
+  --space-5: 1.5rem;   /* 24 */
+  --space-6: 2rem;     /* 32 */
+  --space-7: 3rem;     /* 48 */
+  --space-8: 4rem;     /* 64 */
+  --space-9: 6rem;     /* 96 */
+  --space-10: 8rem;    /* 128 */
+
+  /* Radius — restrained, machined corners */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  /* Borders */
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+
+  /* Elevation — soft, cool shadows for a dark UI; cards lean on borders + depth */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.35);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.40);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+  --shadow-lg: 0 18px 50px rgba(0,0,0,0.55);
+  --shadow-xl: 0 32px 80px rgba(0,0,0,0.62);
+
+  /* Signature glows — used sparingly on live/active elements */
+  --glow-signal: 0 0 0 1px rgba(47,161,204,0.40), 0 10px 34px rgba(47,161,204,0.22);
+  --glow-secure: 0 0 0 1px rgba(47,161,204,0.34), 0 10px 34px rgba(47,161,204,0.16);
+
+  /* Inset hairline that gives surfaces a brushed-metal edge */
+  --inset-top: inset 0 1px 0 rgba(225,235,240,0.06);
+
+  /* Layout */
+  --container-max: 1200px;
+  --container-wide: 1440px;
+  --gutter: var(--space-5);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);    /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --dur-fast: 130ms;                             /* @kind other */
+  --dur-base: 220ms;                             /* @kind other */
+  --dur-slow: 420ms;                             /* @kind other */
+}

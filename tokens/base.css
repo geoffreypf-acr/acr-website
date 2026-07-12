@@ -1,0 +1,93 @@
+/* ACR Automobile — Global base.
+   Minimal resets and brand defaults. Consumers link styles.css which imports this. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+  color: var(--text-primary);
+}
+
+p { margin: 0; }
+
+a {
+  color: var(--accent-hover);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+a:hover { color: var(--signal-300); }
+
+/* Brand eyebrow — the spaced uppercase label, echoing "A U T O M O B I L E" */
+.acr-eyebrow {
+  font-family: var(--font-body);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Technical mono label — tracker IDs, spec data, coordinates */
+.acr-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+::selection { background: var(--accent-soft); color: var(--text-primary); }
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* =====================================================================
+   MOTION — ONYX & GOLD
+   Page-load entrance for hero/section heads (runs once), plus CSS-only
+   scroll-reveals for cards via scroll-driven animations. Both gated on
+   prefers-reduced-motion so print / PDF / reduced-motion show end-state.
+   ===================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes acrRise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+  .hero h1, .hero .lead, .hero-cta, .hero-ticks, .hero-urgency, .hero-media, .hero .eyebrow,
+  .subhero h1, .subhero .lead, .subhero .hero-cta, .subhero .ticks, .subhero .eyebrow,
+  .art-hero h1, .art-hero .sub, .art-hero .cat {
+    animation: acrRise 0.75s var(--ease-out) both;
+  }
+  .hero .eyebrow, .subhero .eyebrow, .art-hero .cat { animation-duration: 0.55s; }
+  .hero h1, .subhero h1, .art-hero h1 { animation-delay: 0.06s; }
+  .hero .lead, .subhero .lead, .art-hero .sub { animation-delay: 0.13s; }
+  .hero-urgency { animation-delay: 0.19s; }
+  .hero-cta, .subhero .hero-cta { animation-delay: 0.22s; }
+  .hero-ticks, .subhero .ticks { animation-delay: 0.30s; }
+  .hero-media { animation-delay: 0.14s; }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes acrReveal { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+    .svc, .step, .feat, .tier, .plan, .rel, .gcard, .rev, .rev-card, .install-card,
+    .optstep, .conc-item, .stat-cell, .why-item, .photo, .gcell {
+      animation: acrReveal linear both;
+      animation-timeline: view();
+      animation-range: entry 4% cover 16%;
+    }
+  }
+}
