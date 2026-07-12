@@ -3,17 +3,71 @@
    Backup: silently emails a copy of every enquiry to ENQUIRY_EMAIL via FormSubmit
    (https://formsubmit.co) — no account needed. The FIRST submission triggers a
    one-time activation email to that address; click the link in it once to switch
-   delivery on. To change the inbox, edit ENQUIRY_EMAIL below. To move to a CRM
-   later, replace the emailBackup() body (e.g. POST to your own endpoint). */
+   delivery on. To change the inbox, edit ENQUIRY_EMAIL below.
+
+   CRM: in addition to WhatsApp + email, EVERY enquiry is also pushed into the ACR
+   CRM \u2014 the same Google-Sheet backend behind crm-a7c93f.html and the booking
+   console \u2014 via crmUpload() below (same SHEET_ENDPOINT as wiz.js). Each row's
+   `service` field carries a label identifying WHICH form the enquiry came from,
+   so the CRM board can be searched/filtered by form. */
 (function () {
   var WA_NUMBER = '447468844431';
   var ENQUIRY_EMAIL = 'info@acrautomobile.com';
+
+  // ---- CRM upload (Google-Sheet backend, same endpoint as wiz.js) ----------
+  // Enquiries land in the sheet and appear in crm-a7c93f.html / booking-console.
+  var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxkzt0Noqoasjcq7EcaK3wtNg1Yg3hodpR_Q4mTSf_ssh0gw8ZBqUsWVv4F43PQWsUV6g/exec';
+  function crmUpload(fields, serviceLabel, sourceRef) {
+    if (!SHEET_ENDPOINT) return;
+    function F() {
+      for (var i = 0; i < arguments.length; i++) {
+        var v = fields[arguments[i]];
+        if (v != null && v !== '' && v !== '\u2014') return v;
+      }
+      return '';
+    }
+    var make = F('Make', 'Vehicle make'), model = F('Model'), vehicle = F('Vehicle');
+    if (!make && vehicle) { var parts = String(vehicle).trim().split(/\s+/); make = parts.shift() || ''; model = parts.join(' '); }
+    var mobile = F('Mobile', 'Mobile number', 'Contact', 'Tel', 'Phone'), email = F('Email');
+    // some forms collect mobile-or-email in one box \u2014 route an @ value to email
+    if (!email && /@/.test(mobile)) { email = mobile; mobile = ''; }
+    var row = {
+      timestamp: new Date().toISOString(),
+      name: F('Name', 'Full name'),
+      mobile: mobile,
+      email: email,
+      postcode: F('Postcode'),
+      make: make,
+      model: model,
+      trim: F('Trim / variant', 'Trim'),
+      fuel: F('Fuel type', 'Fuel'),
+      registration: F('Registration', 'Reg'),
+      service: serviceLabel || '',   // identifies which form/enquiry this is (CRM filter)
+      preferredReply: F('Preferred reply'),
+      source: sourceRef || (location.pathname.replace(/^.*\//, '') || 'index.html'),
+      // extended CRM columns (blank when a form doesn't collect them)
+      year: F('Year'),
+      location: F('Location'),
+      urgency: F('Urgency'),
+      details: F('Details', 'Message', 'Subject')
+    };
+    /* text/plain avoids a CORS preflight so Apps Script accepts it */
+    try {
+      fetch(SHEET_ENDPOINT, {
+        method: 'POST', keepalive: true, mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(row)
+      }).catch(function () {});
+    } catch (e) {}
+  }
   // Friendly labels for known field ids (falls back to the <label> text)
   var LABELS = {
     n: 'Name', e: 'Email', t: 'Mobile', pc: 'Postcode', v: 'Vehicle',
     mk: 'Make', md: 'Model', tr: 'Trim / variant', fuel: 'Fuel type',
     r: 'Registration', s: 'Interested in',
-    cn: 'Name', ce: 'Email', ct: 'Mobile', cv: 'Vehicle', cs: 'Subject', cm: 'Message'
+    cn: 'Name', ce: 'Email', ct: 'Mobile', cv: 'Vehicle', cs: 'Subject', cm: 'Message',
+    // CarPlay enquiry forms (cp* ids) — map to the CRM's canonical columns
+    cpn: 'Name', cpt: 'Mobile', cpe: 'Email', cpy: 'Year', cps: 'Details'
   };
 
   // Vehicle make → model suggestions. Free text is still allowed; these just power
@@ -305,6 +359,10 @@
       var pageRef = (document.title || '').split('|')[0].trim() || location.pathname;
       var text = 'New enquiry from acrautomobile.com (' + pageRef + ')\n\n' + lines.join('\n');
 
+      // service label identifies WHICH enquiry in the CRM: interests, else the form's eyebrow (e.g. "Apple CarPlay enquiry"), else a sensible default
+      var ebEl = form.querySelector('.eyebrow');
+      var svcLabel = fields['Interested in'] || (ebEl && ebEl.textContent.trim()) || 'Vehicle Security Assessment';
+      crmUpload(fields, svcLabel); // → CRM (Google Sheet)
       if (via === 'whatsapp') {
         deliver(text);               // opens WhatsApp prefilled (keeps the user gesture)
         emailBackup(fields, pageRef); // + silent email copy to ACR
@@ -423,6 +481,7 @@
       for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
       var text = 'New dash cam enquiry from acrautomobile.com\n\n' + lines.join('\n');
       fields['Preferred reply'] = dashVia() === 'whatsapp' ? 'WhatsApp' : 'Email';
+      crmUpload(fields, 'Dash Cam' + (fields.Camera ? ' \u2014 ' + fields.Camera : '')); // → CRM (Google Sheet)
       emailCopy(fields);                          // ALWAYS send a silent email copy to ACR
       if (dashVia() === 'whatsapp') deliverWA(text); // + open WhatsApp prefilled when chosen
       form.style.display = 'none';
@@ -479,6 +538,7 @@
       };
       var lines = []; for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
       var text = 'New concierge enquiry from acrautomobile.com\n\n' + lines.join('\n');
+      crmUpload(fields, 'Concierge' + (fields.Services ? ': ' + fields.Services : '')); // → CRM (Google Sheet)
       if (via === 'whatsapp') { deliverWA(text); emailCopy(fields); } else { emailCopy(fields); }
       form.style.display = 'none'; if (ok) ok.style.display = 'block';
       if (window.lucide) lucide.createIcons();
@@ -527,6 +587,7 @@
       };
       var lines=[]; for(var k in fields)if(fields.hasOwnProperty(k))lines.push(k+': '+fields[k]);
       var text='New battery & recovery enquiry from acrautomobile.com\n\n'+lines.join('\n');
+      crmUpload(fields, 'Battery & Recovery' + (fields['Assistance required'] && fields['Assistance required'] !== '\u2014' ? ': ' + fields['Assistance required'] : '')); // → CRM
       if(via==='whatsapp'){ deliverWA(text); emailCopy(fields); } else { emailCopy(fields); }
       form.style.display='none'; if(ok)ok.style.display='block';
       if(window.lucide)lucide.createIcons();
@@ -567,6 +628,7 @@
       };
       var lines=[]; for(var k in fields)if(fields.hasOwnProperty(k))lines.push(k+': '+fields[k]);
       var text='New BMW & MINI enquiry from acrautomobile.com\n\n'+lines.join('\n');
+      crmUpload(fields, 'BMW & MINI' + (fields['Issue type'] && fields['Issue type'] !== '\u2014' ? ': ' + fields['Issue type'] : '')); // → CRM
       if(via==='whatsapp'){ deliverWA(text); emailCopy(fields); } else { emailCopy(fields); }
       form.style.display='none'; if(ok)ok.style.display='block';
       if(window.lucide)lucide.createIcons();
