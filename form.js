@@ -740,4 +740,40 @@
     });
   });
 
+
+  // ---- Referrals page: choose customer vs business before showing a form ----
+  ready(function () {
+    var cards = document.getElementById('whoCards');
+    if (!cards) return;
+    var radios = cards.querySelectorAll('input[name="who"]');
+    function show(panelId, scroll) {
+      radios.forEach(function (r) {
+        var el = document.getElementById(r.getAttribute('data-panel'));
+        if (!el) return;
+        var on = r.getAttribute('data-panel') === panelId;
+        el.hidden = !on;
+        if (on) r.checked = true;
+      });
+      if (window.lucide) lucide.createIcons();
+      if (scroll) {
+        var t = document.getElementById(panelId);
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+    radios.forEach(function (r) {
+      r.addEventListener('change', function () { show(r.getAttribute('data-panel'), false); });
+    });
+    function fromHash(scroll) {
+      var h = (location.hash || '').replace('#', '');
+      if (h === 'refer-form' || h === 'trade-form') { show(h, scroll); return true; }
+      return false;
+    }
+    fromHash(false);
+    window.addEventListener('hashchange', function () { fromHash(true); });
+    // the two summary-card buttons link to #refer-form / #trade-form
+    document.querySelectorAll('a[href="#refer-form"], a[href="#trade-form"]').forEach(function (a) {
+      a.addEventListener('click', function () { show(a.getAttribute('href').replace('#', ''), true); });
+    });
+  });
+
 })();
