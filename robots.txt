@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.acrautomobile.com/sitemap.xml
+Sitemap: https://acrautomobile.com/sitemap.xml
