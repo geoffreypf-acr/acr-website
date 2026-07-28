@@ -723,7 +723,7 @@
       heading: 'New dealership enquiry from acrautomobile.com',
       emailId: 'dl-email', telId: 'dl-tel',
       checkboxes: ['dlinterest', 'Interested in'],
-      required: [['dl-biz', 'your dealership name'], ['dl-name', 'a contact name'], ['dl-type', 'the type of dealership']],
+      required: [['dl-biz', 'your dealership name'], ['dl-name', 'a contact name'], ['dl-type', 'the type of dealership'], ['dl-vol', 'how many vehicles you prepare each month (minimum 5)']],
       fields: [['dl-biz', 'Dealership'], ['dl-name', 'Name'], ['dl-role', 'Role'], ['dl-tel', 'Mobile'],
                ['dl-email', 'Email'], ['dl-pc', 'Postcode'], ['dl-vol', 'Vehicles per month'],
                ['dl-type', 'Dealership type'], ['dl-msg', 'Details']]
@@ -734,7 +734,7 @@
       waLabel: 'Send enquiry', service: 'Trade Rates Enquiry',
       heading: 'New trade rates enquiry from acrautomobile.com',
       emailId: 'tr-email', telId: 'tr-tel',
-      required: [['tr-biz', 'your business name'], ['tr-name', 'a contact name'], ['tr-type', 'the type of business']],
+      required: [['tr-biz', 'your business name'], ['tr-name', 'a contact name'], ['tr-type', 'the type of business'], ['tr-vol', 'how many vehicles you handle each month (minimum 5)']],
       fields: [['tr-biz', 'Business'], ['tr-name', 'Name'], ['tr-tel', 'Mobile'], ['tr-email', 'Email'],
                ['tr-pc', 'Postcode'], ['tr-type', 'Business type'], ['tr-vol', 'Vehicles per month'], ['tr-msg', 'Details']]
     });
