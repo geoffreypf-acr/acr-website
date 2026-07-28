@@ -16,7 +16,7 @@
 
   // ---- CRM upload (Google-Sheet backend, same endpoint as wiz.js) ----------
   // Enquiries land in the sheet and appear in crm-a7c93f.html / booking-console.
-  var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxkzt0Noqoasjcq7EcaK3wtNg1Yg3hodpR_Q4mTSf_ssh0gw8ZBqUsWVv4F43PQWsUV6g/exec';
+  var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbywkNnoW4Nn5injAeEHZszQZFjwdGxxOJJI1DHmb4Fgud3HUZJfYPQZAsRIdsnwtzsWDw/exec';
   function crmUpload(fields, serviceLabel, sourceRef) {
     if (!SHEET_ENDPOINT) return;
     function F() {
