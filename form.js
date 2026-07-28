@@ -637,4 +637,90 @@
       if(window.lucide)lucide.createIcons();
     });
   });
+
+  // ---- Referrals page: customer referral + business trade-rate forms ----
+  ready(function () {
+    function emailCopy(f, subject) {
+      var p = {}; for (var k in f) if (f.hasOwnProperty(k)) p[k] = f[k];
+      p._subject = 'New website enquiry \u2014 ' + subject;
+      p._template = 'table'; p._captcha = 'false';
+      try {
+        fetch('https://formsubmit.co/ajax/' + ENQUIRY_EMAIL, {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(p)
+        }).catch(function () {});
+      } catch (e) {}
+    }
+    function wire(cfg) {
+      var form = document.getElementById(cfg.form);
+      if (!form) return;
+      var btn = document.getElementById(cfg.btn), ok = document.getElementById(cfg.ok);
+      if (!btn) return;
+      var labelEl = btn.querySelector('[data-submit-label]');
+      var icWa = btn.querySelector('[data-ic-wa]'), icMail = btn.querySelector('[data-ic-mail]');
+      function selVia() { var r = form.querySelector('input[name="' + cfg.via + '"]:checked'); return r ? r.value : 'whatsapp'; }
+      function syncB() {
+        var wa = selVia() === 'whatsapp';
+        if (labelEl) labelEl.textContent = wa ? cfg.waLabel : 'Send by email';
+        if (icWa) icWa.style.display = wa ? '' : 'none';
+        if (icMail) icMail.style.display = wa ? 'none' : '';
+        btn.classList.toggle('btn-wa', wa); btn.classList.toggle('btn-silver', !wa);
+        if (window.lucide) lucide.createIcons();
+      }
+      form.querySelectorAll('input[name="' + cfg.via + '"]').forEach(function (r) { r.addEventListener('change', syncB); });
+      syncB();
+      function err(msg, id) {
+        var e = document.getElementById(cfg.form + 'Err');
+        if (!e) { e = document.createElement('div'); e.id = cfg.form + 'Err'; e.style.cssText = 'margin-top:12px;font-size:13.5px;line-height:1.5;color:#e07b7e'; btn.parentNode.insertBefore(e, btn.nextSibling); }
+        e.textContent = msg;
+        var el = id && document.getElementById(id);
+        if (el) { el.style.borderColor = '#d35a5e'; el.focus(); }
+      }
+      function V(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; }
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var pe = document.getElementById(cfg.form + 'Err'); if (pe) pe.remove();
+        form.querySelectorAll('input,select').forEach(function (el) { el.style.borderColor = ''; });
+        for (var i = 0; i < cfg.required.length; i++) {
+          if (!V(cfg.required[i][0])) { err('Please add ' + cfg.required[i][1] + '.', cfg.required[i][0]); return; }
+        }
+        var em = V(cfg.emailId);
+        if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { err('Please enter a valid email address.', cfg.emailId); return; }
+        if (!V(cfg.telId) && !em) { err('Please add a mobile or email so we can reply.', cfg.telId); return; }
+        var via = selVia(), fields = {};
+        cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
+        fields['Preferred reply'] = via === 'whatsapp' ? 'WhatsApp' : 'Email';
+        var lines = []; for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
+        var text = cfg.heading + '\n\n' + lines.join('\n');
+        crmUpload(fields, cfg.service);                 // -> CRM (Google Sheet)
+        emailCopy(fields, cfg.service);                 // ALWAYS a silent email copy to ACR
+        if (via === 'whatsapp') window.open('https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
+        form.style.display = 'none'; if (ok) ok.style.display = 'block';
+        if (window.lucide) lucide.createIcons();
+      });
+    }
+
+    wire({
+      form: 'referralForm', btn: 'referralSubmit', ok: 'referralOk', via: 'rvia',
+      waLabel: 'Send referral', service: 'Customer Referral',
+      heading: 'New customer referral from acrautomobile.com',
+      emailId: 'rf-email', telId: 'rf-tel',
+      required: [['rf-name', 'your name'], ['rf-fname', 'the name of the person you are referring'], ['rf-ftel', 'their mobile number']],
+      fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'], ['rf-reg', 'Registration'],
+               ['rf-fname', 'Referred name'], ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
+               ['rf-reward', 'Reward preference']]
+    });
+
+    wire({
+      form: 'tradeForm', btn: 'tradeSubmit', ok: 'tradeOk', via: 'tvia',
+      waLabel: 'Send enquiry', service: 'Trade Rates Enquiry',
+      heading: 'New trade rates enquiry from acrautomobile.com',
+      emailId: 'tr-email', telId: 'tr-tel',
+      required: [['tr-biz', 'your business name'], ['tr-name', 'a contact name'], ['tr-type', 'the type of business']],
+      fields: [['tr-biz', 'Business'], ['tr-name', 'Name'], ['tr-tel', 'Mobile'], ['tr-email', 'Email'],
+               ['tr-pc', 'Postcode'], ['tr-type', 'Business type'], ['tr-vol', 'Vehicles per month'], ['tr-msg', 'Details']]
+    });
+  });
+
 })();
