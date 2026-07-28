@@ -110,6 +110,7 @@
         var el = reqs[i];
         if (!el.value.trim()) { showErr('Please add ' + (el.getAttribute('data-label') || 'this field') + '.', el); return false; }
         if (el.getAttribute('data-field') === 'email' && !validEmail(el.value)) { showErr('Please enter a valid email address.', el); return false; }
+        if (el.getAttribute('data-field') === 'year' && !/^(19|20)\d{2}$/.test(el.value.trim())) { showErr('Please enter a valid 4-digit year, e.g. 2021.', el); return false; }
       }
       return true;
     }
@@ -156,7 +157,7 @@
         var p = {
           timestamp: new Date().toISOString(),
           name: d.Name || '', mobile: d.Mobile || '', email: d.Email || '', postcode: d.Postcode || '',
-          make: d.Make || '', model: d.Model || '', trim: d.Trim || '', fuel: d.Fuel || '', registration: d.Registration || '',
+          make: d.Make || '', model: d.Model || '', year: d.Year || '', trim: d.Trim || '', fuel: d.Fuel || '', registration: d.Registration || '',
           interested: d['Interested in'] || '', service: d['Interested in'] || '', preferredReply: d['Preferred reply'] || '',
           source: location.pathname.replace(/^.*\//, '') || 'index.html'
         };
@@ -171,7 +172,7 @@
     subBtn.addEventListener('click', function () {
       var interest = Array.prototype.slice.call(form.querySelectorAll('input[data-interest]:checked')).map(function (c) { return c.value; });
       if (form.querySelector('input[data-interest]') && !interest.length) { showErr('Please choose at least one service you’re interested in.'); return; }
-      var d = { Name: get('name'), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
+      var d = { Name: get('name'), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Year: get('year'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
       d['Interested in'] = interest.join(', ') || '—';
       d['Preferred reply'] = via() === 'whatsapp' ? 'WhatsApp' : 'Email';
       var order = ['Name', 'Mobile', 'Email', 'Postcode', 'Make', 'Model', 'Trim', 'Fuel', 'Registration', 'Interested in', 'Preferred reply'];

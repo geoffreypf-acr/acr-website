@@ -64,7 +64,7 @@
   var LABELS = {
     n: 'Name', e: 'Email', t: 'Mobile', pc: 'Postcode', v: 'Vehicle',
     mk: 'Make', md: 'Model', tr: 'Trim / variant', fuel: 'Fuel type',
-    r: 'Registration', s: 'Interested in',
+    r: 'Registration', s: 'Interested in', y: 'Year',
     cn: 'Name', ce: 'Email', ct: 'Mobile', cv: 'Vehicle', cs: 'Subject', cm: 'Message',
     // CarPlay enquiry forms (cp* ids) — map to the CRM's canonical columns
     cpn: 'Name', cpt: 'Mobile', cpe: 'Email', cpy: 'Year', cps: 'Details'
@@ -232,6 +232,9 @@
       if (n === 2) {
         if (!need('mk', 'the vehicle make')) return false;
         if (!need('md', 'the model')) return false;
+        if (!need('y', 'the year')) return false;
+        var yr = document.getElementById('y');
+        if (yr && !/^(19|20)\d{2}$/.test(yr.value.trim())) { showError('Please enter a valid 4-digit year, e.g. 2021.', yr); return false; }
         if (!need('fuel', 'the fuel type')) return false;
         if (!need('r', 'the registration')) return false;
         return true;
