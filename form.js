@@ -638,7 +638,7 @@
     });
   });
 
-  // ---- Referrals page: customer referral + business trade-rate forms ----
+  // ---- Referral, trade-rate and dealership enquiry forms ----
   ready(function () {
     function emailCopy(f, subject) {
       var p = {}; for (var k in f) if (f.hasOwnProperty(k)) p[k] = f[k];
@@ -690,6 +690,11 @@
         if (!V(cfg.telId) && !em) { err('Please add a mobile or email so we can reply.', cfg.telId); return; }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
+        if (cfg.checkboxes) {
+          var picked = Array.prototype.slice.call(form.querySelectorAll('input[name="' + cfg.checkboxes[0] + '"]:checked')).map(function (c) { return c.value; });
+          if (!picked.length) { err('Please choose at least one option.'); return; }
+          fields[cfg.checkboxes[1]] = picked.join(', ');
+        }
         fields['Preferred reply'] = via === 'whatsapp' ? 'WhatsApp' : 'Email';
         var lines = []; for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
         var text = cfg.heading + '\n\n' + lines.join('\n');
@@ -710,6 +715,18 @@
       fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'], ['rf-reg', 'Registration'],
                ['rf-fname', 'Referred name'], ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
                ['rf-reward', 'Reward preference']]
+    });
+
+    wire({
+      form: 'dealerForm', btn: 'dealerSubmit', ok: 'dealerOk', via: 'dlvia',
+      waLabel: 'Send enquiry', service: 'Dealership Enquiry',
+      heading: 'New dealership enquiry from acrautomobile.com',
+      emailId: 'dl-email', telId: 'dl-tel',
+      checkboxes: ['dlinterest', 'Interested in'],
+      required: [['dl-biz', 'your dealership name'], ['dl-name', 'a contact name'], ['dl-type', 'the type of dealership']],
+      fields: [['dl-biz', 'Dealership'], ['dl-name', 'Name'], ['dl-role', 'Role'], ['dl-tel', 'Mobile'],
+               ['dl-email', 'Email'], ['dl-pc', 'Postcode'], ['dl-vol', 'Vehicles per month'],
+               ['dl-type', 'Dealership type'], ['dl-msg', 'Details']]
     });
 
     wire({
