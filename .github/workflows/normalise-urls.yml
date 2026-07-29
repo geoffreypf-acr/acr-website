@@ -1,0 +1,46 @@
+# Safety net for canonical URLs.
+#
+# The ACR SEO dashboard commits new pages straight to GitHub, and writes their
+# canonical / og:url / sitemap / llms.txt entries as https://www.acrautomobile.com
+# That host 301-redirects to the apex domain, so those URLs point at a redirect
+# and the sitemap ends up listing the same page twice.
+#
+# This runs after every push to main, repairs anything that drifted, and commits
+# the fix. The `if:` below stops it retriggering on its own commit.
+name: Normalise canonical URLs
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  normalise:
+    if: "!contains(github.event.head_commit.message, '[normalise]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Normalise URLs
+        run: python3 tools/normalise-urls.py
+
+      - name: Commit and push if anything changed
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "URLs already correct - nothing to commit."
+            exit 0
+          fi
+          git config user.name  "acr-url-guard"
+          git config user.email "noreply@acrautomobile.com"
+          git add -A
+          git commit -m "Normalise canonical URLs to the apex domain [normalise]"
+          git push origin main
