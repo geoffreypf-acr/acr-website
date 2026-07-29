@@ -719,18 +719,48 @@ window.__crmStart = function(){
     showToast(nm+' deleted', function(){ e.deleted=''; save(e.timestamp, { deleted:'' }); render(); });
   });
 
-  function load(){
-    $('refresh').textContent='Loading…';
-    fetch(SHEET_ENDPOINT, {method:'GET'}).then(function(r){ return r.json(); })
-      .then(function(rows){ data = Array.isArray(rows)?rows:(rows.enquiries||[]); data=data.filter(function(e){ return e.timestamp || e.name || e.email; }); $('banner').style.display='none'; render(); })
-      .catch(function(){ $('banner').style.display='block'; $('banner').innerHTML='<b>Couldn\u2019t load the sheet.</b> Check the web-app URL is deployed to \u201cAnyone\u201d.'; })
-      .then(function(){ $('refresh').textContent='Refresh'; });
+  /* Google occasionally returns an error page instead of the data - usually a
+     brief hiccup after a burst of writes. Retry a couple of times before
+     giving up, and never leave the page blank without saying why. */
+  function load(attempt){
+    attempt = attempt || 1;
+    $('refresh').textContent = attempt>1 ? ('Retrying '+attempt+'/3…') : 'Loading…';
+    fetch(SHEET_ENDPOINT, {method:'GET', cache:'no-store'})
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return r.text();
+      })
+      .then(function(txt){
+        var rows;
+        try { rows = JSON.parse(txt); }
+        catch(err){ throw new Error('Google returned a page instead of data'); }
+        var list = Array.isArray(rows) ? rows : (rows.enquiries||[]);
+        data = list.filter(function(e){ return e.timestamp || e.name || e.email; });
+        $('banner').style.display='none';
+        $('refresh').textContent='Refresh';
+        render();
+      })
+      .catch(function(err){
+        if(attempt < 3){
+          $('refresh').textContent='Retrying…';
+          setTimeout(function(){ load(attempt+1); }, attempt*2500);
+          return;
+        }
+        $('refresh').textContent='Refresh';
+        var b=$('banner');
+        b.style.display='block';
+        b.innerHTML = '<b>Could not load your data.</b> '+esc(err && err.message ? err.message : 'Unknown error')
+          + ' &mdash; this is normally temporary. <a href="#" id="bRetry">Try again</a>';
+        var r=document.getElementById('bRetry');
+        if(r) r.addEventListener('click', function(ev){ ev.preventDefault(); load(1); });
+        render();   /* keep the tabs and empty columns on screen rather than a blank page */
+      });
   }
-  $('refresh').addEventListener('click', load);
+  $('refresh').addEventListener('click', function(){ load(1); });
   $('search').addEventListener('input', render);
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDrawer(); });
 
-  load();
+  load(1);
 };
 // If the gate was already satisfied this session, the unlock ran before this script defined
 // __crmStart — so start it now.
