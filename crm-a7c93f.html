@@ -82,7 +82,14 @@
   .crm-btn.del:hover { background: var(--alert-soft); border-color: var(--alert-400); }
   /* Contact action buttons (Call / Message / WhatsApp) */
   .dactions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .dactions a { flex: 1; min-width: 92px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 44px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-primary); font-family: var(--font-body); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  .dtpl { margin-top: 4px; }
+    .dtpl .tpl-lab { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 9px; }
+    .dtpl .tpl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .dtpl .tpl-name { flex: 0 0 118px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .dtpl a, .dtpl button { flex: 1; min-width: 68px; display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-primary); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .dtpl a:hover, .dtpl button:hover { border-color: var(--signal-500); }
+    .dtpl a.wa { color: #25D366; }
+    .dactions a { flex: 1; min-width: 92px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 44px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-primary); font-family: var(--font-body); font-size: 13.5px; font-weight: 600; text-decoration: none; }
   .dactions a:hover { border-color: var(--signal-500); background: var(--accent-soft); }
   .dactions a svg { width: 16px; height: 16px; }
   .dactions a.wa { color: #25D366; border-color: rgba(37,211,102,.4); }
@@ -173,6 +180,7 @@
   <div class="drawer-body">
     <div class="dinfo" id="dInfo"></div>
     <div class="dactions" id="dActions"></div>
+    <div class="dtpl" id="dTemplates"></div>
     <div class="dfield"><label>Status</label>
       <select id="dStatus"></select>
     </div>
@@ -328,6 +336,41 @@ window.__crmStart = function(){
       + '<a href="sms:+'+digits+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</a>'
       + '<a class="wa" href="https://wa.me/'+digits+'" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.15-1.7-.84-2-.94-.26-.1-.46-.15-.65.15-.2.29-.74.94-.9 1.13-.17.2-.34.22-.63.08-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.64-2.05-.17-.3-.02-.46.13-.6.13-.14.3-.34.44-.51.15-.17.2-.29.3-.49.1-.2.05-.37-.02-.51-.08-.15-.65-1.57-.9-2.15-.24-.56-.48-.48-.65-.49h-.56c-.2 0-.5.07-.77.36-.26.29-1 1-1 2.42 0 1.43 1.03 2.8 1.17 3 .14.2 2.03 3.1 4.92 4.35.69.3 1.22.47 1.64.6.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.2-.55-.34zM12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2z"/></svg>WhatsApp</a>';
     } else { act.style.display='none'; act.innerHTML=''; }
+
+    /* ---- Quick message templates (follow-up / closing) ---- */
+    (function(){
+      var box = $('dTemplates');
+      var first = (e.name||'').toString().trim().split(/\s+/)[0] || '';
+      var hi = first ? 'Hello ' + first + ',' : 'Hello,';
+      var TPL = [
+        { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
+          body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.\n\nKind regards,\nACR Automobile' },
+        { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
+          body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
+      ];
+      var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
+      var mail = (e.email||'').toString().trim();
+      if(!digits && !mail){ box.style.display='none'; box.innerHTML=''; return; }
+      box.style.display='block';
+      var html = '<div class="tpl-lab">Quick messages</div>';
+      TPL.forEach(function(t){
+        html += '<div class="tpl-row"><span class="tpl-name">'+t.label+'</span>';
+        if(digits) html += '<a class="wa" target="_blank" rel="noopener" href="https://wa.me/'+digits+'?text='+encodeURIComponent(t.body)+'">WhatsApp</a>'
+                        +  '<a href="sms:+'+digits+'&body='+encodeURIComponent(t.body)+'">SMS</a>';
+        if(mail)   html += '<a href="mailto:'+encodeURIComponent(mail)+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body)+'">Email</a>';
+        html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
+      });
+      box.innerHTML = html;
+      box.querySelectorAll('button[data-tpl]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var t = TPL.filter(function(x){ return x.id===b.getAttribute('data-tpl'); })[0];
+          var done = function(){ var o=b.textContent; b.textContent='Copied'; setTimeout(function(){ b.textContent=o; },1400); };
+          if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t.body).then(done, done); }
+          else { var ta=document.createElement('textarea'); ta.value=t.body; document.body.appendChild(ta); ta.select();
+                 try{ document.execCommand('copy'); }catch(err){} document.body.removeChild(ta); done(); }
+        });
+      });
+    })();
     $('dStatus').value = statusOf(e);
     $('dValue').value = e.value||'';
     $('dFollowup').value = e.followup ? String(e.followup).slice(0,10) : '';
