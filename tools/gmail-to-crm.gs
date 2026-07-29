@@ -51,6 +51,20 @@ var CFG = {
     'booking', 'book in', 'appointment', 'enquiry', 'enquire', 'availability'
   ],
 
+  // ── Missed calls ──
+  // Your phone already emails info@ every missed call, subject "Missed Call",
+  // body "+447xxxxxxxxx[Name] HHMM". Those are inbound leads with nowhere to go.
+  MISSED_CALL_SUBJECT: 'Missed Call',
+  MISSED_CALL_DAYS: 30,
+  // Your own handsets - never create a lead for these.
+  OWN_NUMBERS: ['+447818080205', '07818080205', '+447468844431', '07468844431'],
+  // Suppliers and known contacts: still imported, but tagged so you can filter.
+  KNOWN_CONTACTS: {
+    '+447411086500': 'Bajram Auto Electrician'
+  },
+  // Don't raise a second lead if that number is already open on the board.
+  SKIP_IF_OPEN: true,
+
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
     'formsubmit.co',        // already captured by the website forms
@@ -85,19 +99,34 @@ function syncGmailToCrm() { return run_(false); }
 /** Log what WOULD be imported, write nothing. Run this first. */
 function dryRunGmailToCrm() { return run_(true); }
 
+/** Import missed calls only. */
+function syncMissedCalls() { return missedCalls_(false); }
+
+/** Log which missed calls WOULD become leads, write nothing. */
+function dryRunMissedCalls() { return missedCalls_(true); }
+
+/** Everything: email enquiries + missed calls. This is what the trigger runs. */
+function syncAll() {
+  var a = run_(false), b = missedCalls_(false);
+  Logger.log('Total imported: %s email, %s missed calls.', a, b);
+  return a + b;
+}
+
 /** Run automatically every hour. Run once. */
 function installGmailTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'syncGmailToCrm') ScriptApp.deleteTrigger(t);
+    var f = t.getHandlerFunction();
+    if (f === 'syncGmailToCrm' || f === 'syncAll') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('syncGmailToCrm').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('syncAll').timeBased().everyHours(1).create();
   Logger.log('Hourly sync installed.');
 }
 
 /** Stop the automatic run. */
 function removeGmailTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'syncGmailToCrm') ScriptApp.deleteTrigger(t);
+    var f = t.getHandlerFunction();
+    if (f === 'syncGmailToCrm' || f === 'syncAll') ScriptApp.deleteTrigger(t);
   });
   Logger.log('Hourly sync removed.');
 }
@@ -198,6 +227,92 @@ function run_(dryRun) {
 }
 
 /** Bulk mail carries List-Unsubscribe (or Precedence: bulk). People do not. */
+function missedCalls_(dryRun) {
+  var ss    = SpreadsheetApp.openById(CFG.SHEET_ID);
+  var sheet = CFG.SHEET_NAME ? ss.getSheetByName(CFG.SHEET_NAME) : ss.getSheets()[0];
+  var lastCol = sheet.getLastColumn();
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h||'').trim(); });
+
+  var tidCol = headers.indexOf('threadId');
+  if (tidCol === -1 && !dryRun) {
+    sheet.getRange(1, lastCol + 1).setValue('threadId');
+    headers.push('threadId'); tidCol = headers.length - 1;
+  }
+  var mobCol = headers.indexOf('mobile'), stCol = headers.indexOf('status');
+
+  var seen = {}, openNums = {};
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var all = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    all.forEach(function (r) {
+      if (tidCol > -1 && r[tidCol]) seen[String(r[tidCol]).trim()] = true;
+      if (CFG.SKIP_IF_OPEN && mobCol > -1 && r[mobCol]) {
+        var st = stCol > -1 ? String(r[stCol]||'').trim() : '';
+        if (st !== 'Completed' && st !== 'Lost') openNums[digits_(r[mobCol])] = true;
+      }
+    });
+  }
+
+  var threads = GmailApp.search('subject:"' + CFG.MISSED_CALL_SUBJECT + '" newer_than:' + CFG.MISSED_CALL_DAYS + 'd', 0, 200);
+  var added = [], skipped = 0;
+
+  threads.forEach(function (thread) {
+    var id = thread.getId();
+    if (seen[id]) { skipped++; return; }
+    var msg  = thread.getMessages()[0];
+    var body = (msg.getPlainBody() || '').replace(/\s+/g, ' ').trim();
+    var m = body.match(/^\s*(\+?\d[\d]{6,})\s*(.*)$/);
+    if (!m) { skipped++; return; }
+
+    var num  = m[1];
+    var rest = (m[2] || '').trim();
+    var tm   = rest.match(/(\d{3,4})\s*$/);
+    var when = tm ? tm[1] : '';
+    var who  = (tm ? rest.slice(0, tm.index) : rest).trim();
+
+    if (CFG.OWN_NUMBERS.some(function (o) { return digits_(o) === digits_(num); })) { skipped++; return; }
+    if (CFG.SKIP_IF_OPEN && openNums[digits_(num)]) { skipped++; return; }
+
+    var known = CFG.KNOWN_CONTACTS[num] || '';
+    var name  = who || known || 'Missed call ' + num;
+    openNums[digits_(num)] = true;   // don't add the same number twice in one run
+
+    added.push({ id: id, row: {
+      timestamp:      msg.getDate().toISOString(),
+      name:           name,
+      mobile:         num,
+      service:        'Missed call',
+      source:         'phone',
+      status:         'New',
+      preferredReply: 'Phone',
+      details:        'Missed call' + (when ? ' at ' + when.slice(0,-2) + ':' + when.slice(-2) : '') + (known ? ' — known contact: ' + known : ''),
+      threadId:       id
+    }});
+  });
+
+  if (dryRun) {
+    Logger.log('DRY RUN (missed calls) — %s would become leads, %s skipped.', added.length, skipped);
+    added.forEach(function (a) { Logger.log('  + %s  %s', a.row.mobile, a.row.details); });
+    return added.length;
+  }
+  if (!added.length) { Logger.log('No new missed calls. %s skipped.', skipped); return 0; }
+
+  var rows = added.map(function (a) {
+    return headers.map(function (h) { return a.row.hasOwnProperty(h) ? a.row[h] : ''; });
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  Logger.log('Imported %s missed calls, skipped %s.', added.length, skipped);
+  return added.length;
+}
+
+/** Compare numbers ignoring +44 / 0 / spacing. */
+function digits_(n) {
+  var d = String(n || '').replace(/\D/g, '');
+  if (d.indexOf('44') === 0) d = d.slice(2);
+  if (d.indexOf('0') === 0) d = d.slice(1);
+  return d;
+}
+
 function isBulk_(msg) {
   try {
     if (msg.getHeader('List-Unsubscribe')) return true;
