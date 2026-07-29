@@ -27,7 +27,8 @@
 var CFG = {
   SHEET_ID:   '1MszFXo--wsC5ozeh6SLnzqG2LG2fcoA4ZoNhwsOp29o',
   SHEET_NAME: '',           // leave blank to use the first sheet
-  DAYS_BACK:  30,           // how far back to look on each run
+  DAYS_BACK:  7,            // how far back to look on each run (the hourly
+                            // trigger only needs a few days; raise it for a backfill)
   MAX_THREADS: 100,         // safety cap per run
 
   // Only mail Gmail itself classifies as Primary. This alone removes
@@ -55,7 +56,7 @@ var CFG = {
   // Your phone already emails info@ every missed call, subject "Missed Call",
   // body "+447xxxxxxxxx[Name] HHMM". Those are inbound leads with nowhere to go.
   MISSED_CALL_SUBJECT: 'Missed Call',
-  MISSED_CALL_DAYS: 30,
+  MISSED_CALL_DAYS: 7,
   // Your own handsets - never create a lead for these.
   OWN_NUMBERS: ['+447818080205', '07818080205', '+447468844431', '07468844431'],
   // Suppliers and known contacts: still imported, but tagged so you can filter.
@@ -218,15 +219,22 @@ function run_(dryRun) {
   var query = 'to:info@acrautomobile.com -in:chats -in:draft -in:spam -in:trash'
             + (CFG.PRIMARY_ONLY ? ' category:primary' : '')
             + ' newer_than:' + CFG.DAYS_BACK + 'd';
-  var threads = GmailApp.search(query, 0, CFG.MAX_THREADS);
-  var added = [], skipped = 0;
+  var found = GmailApp.search(query, 0, CFG.MAX_THREADS);
 
-  threads.forEach(function (thread) {
+  // Only fetch bodies for threads we have not imported before, and fetch them
+  // in one batched call. Calling thread.getMessages() per thread is a separate
+  // round trip each time and is what made a pull take a minute.
+  var threads = found.filter(function (t) { return !seen[t.getId()]; });
+  var skipped = found.length - threads.length;
+  var bulk = threads.length ? GmailApp.getMessagesForThreads(threads) : [];
+  var added = [];
+
+  threads.forEach(function (thread, idx) {
     var id = thread.getId();
-    if (seen[id]) { skipped++; return; }
 
-    var msgs = thread.getMessages();
+    var msgs = bulk[idx] || thread.getMessages();
     var first = msgs[0];
+    if (!first) { skipped++; return; }
     var from    = first.getFrom() || '';
     var subject = (thread.getFirstMessageSubject() || '').trim();
 
@@ -303,13 +311,17 @@ function missedCalls_(dryRun) {
     });
   }
 
-  var threads = GmailApp.search('subject:"' + CFG.MISSED_CALL_SUBJECT + '" newer_than:' + CFG.MISSED_CALL_DAYS + 'd', 0, 200);
-  var added = [], skipped = 0;
+  var found = GmailApp.search('subject:"' + CFG.MISSED_CALL_SUBJECT + '" newer_than:' + CFG.MISSED_CALL_DAYS + 'd', 0, 200);
 
-  threads.forEach(function (thread) {
+  var threads = found.filter(function (t) { return !seen[t.getId()]; });
+  var skipped = found.length - threads.length;
+  var bulk = threads.length ? GmailApp.getMessagesForThreads(threads) : [];
+  var added = [];
+
+  threads.forEach(function (thread, idx) {
     var id = thread.getId();
-    if (seen[id]) { skipped++; return; }
-    var msg  = thread.getMessages()[0];
+    var msg  = (bulk[idx] || thread.getMessages())[0];
+    if (!msg) { skipped++; return; }
     var parsed = parseMissedCall_(msg.getPlainBody() || '');
     if (!parsed) { skipped++; return; }
 
