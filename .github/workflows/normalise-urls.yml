@@ -18,7 +18,10 @@ permissions:
 
 jobs:
   normalise:
-    if: "!contains(github.event.head_commit.message, '[normalise]')"
+    # Skip only our own auto-commit. Matching on the exact subject line rather
+    # than a loose marker, so a marker mentioned in someone else's commit body
+    # cannot accidentally suppress the guard.
+    if: "!startsWith(github.event.head_commit.message, 'Normalise canonical URLs to the apex domain')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,5 +45,5 @@ jobs:
           git config user.name  "acr-url-guard"
           git config user.email "noreply@acrautomobile.com"
           git add -A
-          git commit -m "Normalise canonical URLs to the apex domain [normalise]"
+          git commit -m "Normalise canonical URLs to the apex domain"
           git push origin main
