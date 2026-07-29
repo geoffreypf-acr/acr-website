@@ -272,6 +272,7 @@
     <div class="dfield"><label>Status</label>
       <select id="dStatus"></select>
     </div>
+    <div class="dfield"><label>Category</label><select id="dCategory"></select></div>
     <div class="dfield"><label>Deal value (£)</label><input id="dValue" inputmode="decimal" placeholder="e.g. 899"></div>
     <div class="dfield"><label>Follow-up date</label>
       <input id="dFollowup" type="date">
@@ -324,6 +325,14 @@ window.__crmStart = function(){
 
   // seed status dropdown
   STAGES.forEach(function(s){ var o=document.createElement('option'); o.value=s.key; o.textContent=s.key; $('dStatus').appendChild(o); });
+  (function(){
+    var sel=$('dCategory'); if(!sel) return;
+    var auto=document.createElement('option'); auto.value=''; auto.textContent='Auto — from the enquiry';
+    sel.appendChild(auto);
+    CATS.map(function(c){ return c[0]; }).concat(['Other']).forEach(function(name){
+      var o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
+    });
+  })();
 
   function esc(t){ var d=document.createElement('div'); d.textContent=t==null?'':t; return d.innerHTML; }
   function statusOf(e){ var s=(e.status||'').toString().trim(); return STAGES.some(function(x){return x.key===s;}) ? s : 'New'; }
@@ -345,6 +354,8 @@ window.__crmStart = function(){
     ['Concierge',          /concierge|storage|detailing|chauffeur|sourcing/i]
   ];
   function categoryOf(e){
+    var set = (e.category||'').toString().trim();
+    if(set) return set;                       /* chosen by hand in the drawer */
     var hay = [serviceOf(e), e.source||'', e.details||''].join(' ');
     for(var i=0;i<CATS.length;i++){ if(CATS[i][1].test(hay)) return CATS[i][0]; }
     return 'Other';
@@ -631,6 +642,7 @@ window.__crmStart = function(){
       });
     })();
     $('dStatus').value = statusOf(e);
+    $('dCategory').value = (e.category||'').toString().trim();
     $('dValue').value = e.value||'';
     $('dFollowup').value = e.followup ? String(e.followup).slice(0,10) : '';
     $('dOwner').value = e.owner||'';
@@ -661,8 +673,8 @@ window.__crmStart = function(){
   });
   $('dSave').addEventListener('click', function(){
     if(!current) return;
-    current.status=$('dStatus').value; current.value=$('dValue').value; current.followup=$('dFollowup').value; current.owner=$('dOwner').value; current.notes=$('dNotes').value; current.followups=fnumVal||'';
-    save(current.timestamp, { status:current.status, value:current.value, followup:current.followup, owner:current.owner, notes:current.notes, followups:current.followups });
+    current.status=$('dStatus').value; current.category=$('dCategory').value; current.value=$('dValue').value; current.followup=$('dFollowup').value; current.owner=$('dOwner').value; current.notes=$('dNotes').value; current.followups=fnumVal||'';
+    save(current.timestamp, { status:current.status, category:current.category, value:current.value, followup:current.followup, owner:current.owner, notes:current.notes, followups:current.followups });
     render(); this.textContent='Saved ✓'; var self=this; setTimeout(function(){ self.textContent='Save'; }, 1300);
   });
 
