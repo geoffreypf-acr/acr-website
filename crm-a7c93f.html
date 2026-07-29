@@ -35,6 +35,11 @@
     .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 12px; }
     .dcard { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px 17px; }
     .dcard h3 { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin: 0 0 13px; }
+    .dcard-h { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
+    .dcard-h h3 { margin: 0; flex: 1; }
+    .dsel { flex: none; height: 28px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--border-default);
+      background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body); font-size: 12px; cursor: pointer; }
+    .dsel:focus { outline: none; border-color: var(--signal-500); }
     .dcard .empty { font-size: 12.5px; color: var(--text-muted); }
     /* horizontal magnitude bars - one hue, direct labels, 4px rounded data-end */
     .bars .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin-bottom: 9px; }
@@ -264,7 +269,20 @@
       <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
       <div class="dcard"><h3>By category</h3><div class="bars" id="chSource"></div></div>
       <div class="dcard"><h3>How they reached us</h3><div class="bars" id="chService"></div></div>
-      <div class="dcard"><h3>Enquiries, last 8 weeks</h3><div class="cols" id="chWeeks"></div></div>
+      <div class="dcard">
+        <div class="dcard-h">
+          <h3 id="chWeeksTitle">Enquiries, last 8 weeks</h3>
+          <select id="chRange" class="dsel">
+            <option value="8w">Last 8 weeks</option>
+            <option value="3m">Last 3 months</option>
+            <option value="6m">Last 6 months</option>
+            <option value="9m">Last 9 months</option>
+            <option value="12m">Last 12 months</option>
+            <option value="ytd">Year to date</option>
+          </select>
+        </div>
+        <div class="cols" id="chWeeks"></div>
+      </div>
     </div>
   </div>
 
@@ -440,6 +458,41 @@ window.__crmStart = function(){
     });
   })();
 
+  /* Time buckets for the trend chart. Eight weeks stays weekly; every longer
+     range is grouped by month, because 52 weekly bars is unreadable. */
+  function buckets_(range, now){
+    var out=[], i, a, b;
+    if(range==='8w'){
+      var w=weekStart(now);
+      for(i=7;i>=0;i--){
+        a=new Date(w); a.setDate(a.getDate()-i*7);
+        b=new Date(a); b.setDate(b.getDate()+7);
+        out.push({from:a, to:b, label:a.getDate()+'/'+(a.getMonth()+1)});
+      }
+      return out;
+    }
+    var months = range==='ytd' ? (now.getMonth()+1) : parseInt(range,10) || 3;
+    for(i=months-1;i>=0;i--){
+      a=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      b=new Date(a.getFullYear(), a.getMonth()+1, 1);
+      out.push({from:a, to:b, label:a.toLocaleDateString('en-GB',{month:'short'})});
+    }
+    return out;
+  }
+  function rangeLabel_(r){
+    if(r==='8w')  return 'last 8 weeks';
+    if(r==='ytd') return 'year to date';
+    return 'last ' + parseInt(r,10) + ' months';
+  }
+  (function(){
+    var sel=$('chRange'); if(!sel) return;
+    sel.value = localStorage.getItem('acr_crm_range') || '8w';
+    sel.addEventListener('change', function(){
+      localStorage.setItem('acr_crm_range', sel.value);
+      renderDash();
+    });
+  })();
+
   function renderDash(){
     var box=$('dash'); if(!box || box.hidden) return;
     /* Archived records are historic clean-up, not performance. They stay out
@@ -477,16 +530,17 @@ window.__crmStart = function(){
     bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }), '', 0);
     bars('chSource',  cnt(live, categoryOf), '', 8);
     bars('chService', cnt(live, channelOf));
-    var cols=[], w=weekStart(now);
-    for(var i=7;i>=0;i--){
-      var a=new Date(w); a.setDate(a.getDate()-i*7); var b=new Date(a); b.setDate(b.getDate()+7);
-      cols.push([a, live.filter(function(e){ var d=ts(e); return d && d>=a && d<b; }).length]);
-    }
+    var range = localStorage.getItem('acr_crm_range') || '8w';
+    var cols = buckets_(range, now).map(function(b){
+      return [b.label, live.filter(function(e){ var d=ts(e); return d && d>=b.from && d<b.to; }).length];
+    });
+    var titleEl=$('chWeeksTitle');
+    if(titleEl) titleEl.textContent = 'Enquiries, ' + rangeLabel_(range);
     var mx=Math.max(1, Math.max.apply(null, cols.map(function(c){ return c[1]; })));
     $('chWeeks').innerHTML = cols.map(function(c){
       var h=Math.max(2, Math.round(c[1]/mx*84));
-      var lab=c[0].getDate()+'/'+(c[0].getMonth()+1);
-      return '<div class="c" title="Week of '+lab+': '+c[1]+' enquir'+(c[1]===1?'y':'ies')+'">'
+      var lab=c[0];
+      return '<div class="c" title="'+esc(lab)+': '+c[1]+' enquir'+(c[1]===1?'y':'ies')+'">'
            +   '<span class="cv">'+(c[1]||'')+'</span>'
            +   '<span class="bar" style="height:'+h+'px"></span>'
            +   '<span class="wl">'+lab+'</span></div>';
