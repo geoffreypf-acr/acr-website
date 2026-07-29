@@ -414,9 +414,13 @@ window.__crmStart = function(){
 
   /* ---------- Dashboard ---------- */
   function weekStart(d){ var x=new Date(d); var day=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-day); return x; }
-  function bars(elId, pairs, unit){
+  /* limit defaults to 6; pass 0 to show every non-zero row. The stage chart
+     must never truncate - dropping Completed off the end made it look as
+     though nothing had ever been won. */
+  function bars(elId, pairs, unit, limit){
     var el=$(elId); if(!el) return;
-    pairs=pairs.filter(function(p){ return p[1]>0; }).sort(function(a,b){ return b[1]-a[1]; }).slice(0,6);
+    pairs=pairs.filter(function(p){ return p[1]>0; }).sort(function(a,b){ return b[1]-a[1]; });
+    if(limit !== 0) pairs = pairs.slice(0, limit || 6);
     if(!pairs.length){ el.innerHTML='<div class="empty">Nothing yet.</div>'; return; }
     var max=pairs[0][1];
     el.innerHTML = pairs.map(function(p){
@@ -470,8 +474,8 @@ window.__crmStart = function(){
       return '<div class="tile"><div class="k">'+esc(t[0])+'</div><div class="v">'+esc(String(t[1]))+'</div><div class="s">'+esc(t[2])+'</div></div>';
     }).join('');
     var cnt=function(arr, fn){ var m={}; arr.forEach(function(e){ var k=(fn(e)||'').toString().trim(); if(k) m[k]=(m[k]||0)+1; }); return Object.keys(m).map(function(k){ return [k,m[k]]; }); };
-    bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }));
-    bars('chSource',  cnt(live, categoryOf));
+    bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }), '', 0);
+    bars('chSource',  cnt(live, categoryOf), '', 8);
     bars('chService', cnt(live, channelOf));
     var cols=[], w=weekStart(now);
     for(var i=7;i>=0;i--){
