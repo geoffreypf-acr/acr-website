@@ -22,7 +22,31 @@
   .pill { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border-radius: 999px; background: var(--alert-soft); border: 1px solid rgba(224,105,91,.3); color: var(--alert-400); font-size: 13px; font-weight: 600; }
   .pill.zero { background: var(--surface-inset); border-color: var(--border-default); color: var(--text-muted); }
 
-  .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(258px, 1fr); gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: start; }
+  /* ---- Dashboard ---- */
+    .dash { margin-bottom: 20px; }
+    .dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; }
+    .tile { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px; }
+    .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
+    .tile .v { font-family: var(--font-display); font-size: 27px; font-weight: 700; color: var(--text-primary); line-height: 1.15; margin-top: 7px; letter-spacing: -.01em; }
+    .tile .s { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 12px; }
+    .dcard { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px 17px; }
+    .dcard h3 { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin: 0 0 13px; }
+    .dcard .empty { font-size: 12.5px; color: var(--text-muted); }
+    /* horizontal magnitude bars - one hue, direct labels, 4px rounded data-end */
+    .bars .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin-bottom: 9px; }
+    .bars .lab { font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bars .num { font-size: 12.5px; color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .bars .track { grid-column: 1 / -1; height: 8px; background: rgba(180,196,210,.07); border-radius: 4px; overflow: hidden; }
+    .bars .fill { height: 100%; background: #2FA1CC; border-radius: 4px; min-width: 3px; }
+    /* weekly columns - single series */
+    .cols { display: flex; align-items: flex-end; gap: 6px; height: 118px; }
+    .cols .c { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; height: 100%; }
+    .cols .bar { width: 100%; background: #2FA1CC; border-radius: 4px 4px 0 0; min-height: 2px; }
+    .cols .wl { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+    .cols .cv { font-size: 11px; color: var(--text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
+    @media (max-width: 640px) { .dash-charts { grid-template-columns: 1fr; } }
+    .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(258px, 1fr); gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: start; }
   .col { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); display: flex; flex-direction: column; min-height: 120px; }
   .col.drop { border-color: var(--signal-500); box-shadow: 0 0 0 1px var(--signal-500); }
   .col-h { display: flex; align-items: center; gap: 9px; padding: 14px 15px 10px; }
@@ -162,11 +186,22 @@
     <div class="spacer"></div>
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
     <span class="pill zero" id="fuPill">0 follow-ups due</span>
+    <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="refresh">Refresh</button>
     <a class="crm-btn primary" href="booking-console-a7c93f.html">Booking console →</a>
   </div>
 
   <div class="banner" id="banner"></div>
+  <div class="dash" id="dash" hidden>
+    <div class="dash-tiles" id="dashTiles"></div>
+    <div class="dash-charts">
+      <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
+      <div class="dcard"><h3>Where they came from</h3><div class="bars" id="chSource"></div></div>
+      <div class="dcard"><h3>Top services</h3><div class="bars" id="chService"></div></div>
+      <div class="dcard"><h3>Enquiries, last 8 weeks</h3><div class="cols" id="chWeeks"></div></div>
+    </div>
+  </div>
+
   <div class="board" id="board"></div>
 </div>
 
@@ -259,6 +294,68 @@ window.__crmStart = function(){
   function money(n){ return '£'+n.toLocaleString('en-GB'); }
   function fmtD(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
 
+  /* ---------- Dashboard ---------- */
+  function weekStart(d){ var x=new Date(d); var day=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-day); return x; }
+  function bars(elId, pairs, unit){
+    var el=$(elId); if(!el) return;
+    pairs=pairs.filter(function(p){ return p[1]>0; }).sort(function(a,b){ return b[1]-a[1]; }).slice(0,6);
+    if(!pairs.length){ el.innerHTML='<div class="empty">Nothing yet.</div>'; return; }
+    var max=pairs[0][1];
+    el.innerHTML = pairs.map(function(p){
+      var pc=Math.max(3, Math.round(p[1]/max*100));
+      return '<div class="row" title="'+esc(p[0])+': '+p[1]+(unit||'')+'">'
+           +   '<span class="lab">'+esc(p[0])+'</span><span class="num">'+p[1]+(unit||'')+'</span>'
+           +   '<span class="track"><span class="fill" style="width:'+pc+'%"></span></span>'
+           + '</div>';
+    }).join('');
+  }
+  function renderDash(){
+    var box=$('dash'); if(!box || box.hidden) return;
+    var live = data.filter(function(e){ return !isDeleted(e); });
+    var open = live.filter(function(e){ var st=statusOf(e); return st!=='Completed' && st!=='Lost'; });
+    var won  = live.filter(function(e){ return statusOf(e)==='Completed'; });
+    var lost = live.filter(function(e){ return statusOf(e)==='Lost'; });
+    var now=new Date(), wk0=weekStart(now), prev=new Date(wk0); prev.setDate(prev.getDate()-7);
+    var ts=function(e){ return e.timestamp? new Date(e.timestamp) : null; };
+    var thisWk = live.filter(function(e){ var d=ts(e); return d && d>=wk0; }).length;
+    var lastWk = live.filter(function(e){ var d=ts(e); return d && d>=prev && d<wk0; }).length;
+    var pipe = open.reduce(function(a,e){ return a+valNum(e); },0);
+    var wonV = won.reduce(function(a,e){ return a+valNum(e); },0);
+    var decided = won.length+lost.length;
+    var conv = decided? Math.round(won.length/decided*100) : null;
+    var due = live.filter(function(e){ return isOverdue(e); }).length;
+    var delta = thisWk-lastWk;
+    var tiles=[
+      ['New this week', thisWk, (lastWk||delta) ? (delta>0?'+':'')+delta+' vs last week' : 'first week of data'],
+      ['Open enquiries', open.length, live.length+' total on record'],
+      ['Pipeline value', pipe?money(pipe):'—', pipe? open.filter(function(e){return valNum(e)>0;}).length+' with a value set' : 'no values entered yet'],
+      ['Won', won.length, wonV?money(wonV)+' recorded':'no values entered yet'],
+      ['Conversion', conv===null?'—':conv+'%', decided? won.length+' won / '+lost.length+' lost' : 'nothing closed yet'],
+      ['Follow-ups due', due, due? 'needs chasing today' : 'all clear']
+    ];
+    $('dashTiles').innerHTML = tiles.map(function(t){
+      return '<div class="tile"><div class="k">'+esc(t[0])+'</div><div class="v">'+esc(String(t[1]))+'</div><div class="s">'+esc(t[2])+'</div></div>';
+    }).join('');
+    var cnt=function(arr, fn){ var m={}; arr.forEach(function(e){ var k=(fn(e)||'').toString().trim(); if(k) m[k]=(m[k]||0)+1; }); return Object.keys(m).map(function(k){ return [k,m[k]]; }); };
+    bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }));
+    bars('chSource',  cnt(live, function(e){ return (e.source||'').replace(/\.html$/,'').replace(/-/g,' '); }));
+    bars('chService', cnt(live, function(e){ return serviceOf(e).split(',')[0]; }));
+    var cols=[], w=weekStart(now);
+    for(var i=7;i>=0;i--){
+      var a=new Date(w); a.setDate(a.getDate()-i*7); var b=new Date(a); b.setDate(b.getDate()+7);
+      cols.push([a, live.filter(function(e){ var d=ts(e); return d && d>=a && d<b; }).length]);
+    }
+    var mx=Math.max(1, Math.max.apply(null, cols.map(function(c){ return c[1]; })));
+    $('chWeeks').innerHTML = cols.map(function(c){
+      var h=Math.max(2, Math.round(c[1]/mx*84));
+      var lab=c[0].getDate()+'/'+(c[0].getMonth()+1);
+      return '<div class="c" title="Week of '+lab+': '+c[1]+' enquir'+(c[1]===1?'y':'ies')+'">'
+           +   '<span class="cv">'+(c[1]||'')+'</span>'
+           +   '<span class="bar" style="height:'+h+'px"></span>'
+           +   '<span class="wl">'+lab+'</span></div>';
+    }).join('');
+  }
+
   function render(){
     var q = ($('search').value||'').toLowerCase().trim();
     var board = $('board'); board.innerHTML='';
@@ -298,7 +395,20 @@ window.__crmStart = function(){
       board.appendChild(col);
     });
     var pill=$('fuPill'); pill.textContent = due+' follow-up'+(due===1?'':'s')+' due'; pill.className='pill'+(due?'':' zero');
+    renderDash();
   }
+
+  (function(){
+    var btn=$('dashToggle'), box=$('dash');
+    if(!btn||!box) return;
+    if(localStorage.getItem('acr_crm_dash')==='1'){ box.hidden=false; btn.classList.add('primary'); }
+    btn.addEventListener('click', function(){
+      box.hidden=!box.hidden;
+      btn.classList.toggle('primary', !box.hidden);
+      localStorage.setItem('acr_crm_dash', box.hidden?'0':'1');
+      renderDash();
+    });
+  })();
 
   function find(key){ return data.filter(function(e){ return String(e.timestamp)===String(key); })[0]; }
 
