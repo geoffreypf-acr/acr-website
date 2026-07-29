@@ -293,6 +293,7 @@
         <div class="cols" id="chWeeks"></div>
       </div>
       <div class="dcard"><h3>Best &amp; quietest</h3><div class="bw" id="chBest"></div></div>
+      <div class="dcard"><h3>Leading category by month</h3><div class="bw" id="chLead"></div></div>
     </div>
   </div>
 
@@ -534,6 +535,37 @@ window.__crmStart = function(){
     });
     return { best:{label:labelOf(+best), n:counts[best]}, worst:{label:labelOf(+worst), n:counts[worst]}, periods:keys.length };
   }
+  /* Which category led in each month - the seasonal picture. Security tends to
+     spike after local theft, CarPlay around plate changes, and this is where
+     that shows up. */
+  function renderLead_(live, now){
+    var el=$('chLead'); if(!el) return;
+    var byMonth={};
+    live.forEach(function(e){
+      if(!e.timestamp) return;
+      var d=new Date(e.timestamp); if(isNaN(d)) return;
+      var k=new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      var c=categoryOf(e) || 'Other';
+      (byMonth[k] = byMonth[k] || {})[c] = ((byMonth[k]||{})[c] || 0) + 1;
+    });
+    var keys=Object.keys(byMonth).sort(function(a,b){ return b-a; }).slice(0,6);
+    if(!keys.length){ el.innerHTML='<div class="empty">Nothing yet.</div>'; return; }
+    var thisMonth=new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    el.innerHTML = keys.map(function(k){
+      var cats=byMonth[k], top=null, n=0, total=0;
+      Object.keys(cats).forEach(function(c){ total+=cats[c]; if(cats[c]>n){ n=cats[c]; top=c; } });
+      var share = total ? Math.round(n/total*100) : 0;
+      var lbl = new Date(+k).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+      var isNow = String(k)===String(thisMonth);
+      return '<div class="r"'+(isNow?' style="background:rgba(47,161,204,.07);margin:0 -6px;padding-left:6px;padding-right:6px;border-radius:6px"':'')+'>'
+           +   '<span class="k">'+esc(lbl)+(isNow?' · so far':'')+'</span>'
+           +   '<span class="w">'+esc(top||'—')+'</span>'
+           +   '<span class="v">'+n+'</span>'
+           + '</div>'
+           + '<div style="font-size:11px;color:var(--text-muted);margin:-4px 0 6px">'+share+'% of that month\u2019s enquiries</div>';
+    }).join('');
+  }
+
   function renderBest_(live, now){
     var el=$('chBest'); if(!el) return;
     var wk=periodStats_(live,'week',now), mo=periodStats_(live,'month',now);
@@ -608,6 +640,7 @@ window.__crmStart = function(){
     }).join('');
 
     renderBest_(live, now);
+    renderLead_(live, now);
   }
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
