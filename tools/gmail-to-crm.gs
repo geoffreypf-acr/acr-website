@@ -260,15 +260,12 @@ function missedCalls_(dryRun) {
     var id = thread.getId();
     if (seen[id]) { skipped++; return; }
     var msg  = thread.getMessages()[0];
-    var body = (msg.getPlainBody() || '').replace(/\s+/g, ' ').trim();
-    var m = body.match(/^\s*(\+?\d[\d]{6,})\s*(.*)$/);
-    if (!m) { skipped++; return; }
+    var parsed = parseMissedCall_(msg.getPlainBody() || '');
+    if (!parsed) { skipped++; return; }
 
-    var num  = m[1];
-    var rest = (m[2] || '').trim();
-    var tm   = rest.match(/(\d{3,4})\s*$/);
-    var when = tm ? tm[1] : '';
-    var who  = (tm ? rest.slice(0, tm.index) : rest).trim();
+    var num  = parsed.number;
+    var who  = parsed.name;
+    var when = parsed.time;
 
     if (CFG.OWN_NUMBERS.some(function (o) { return digits_(o) === digits_(num); })) { skipped++; return; }
     if (CFG.SKIP_IF_OPEN && openNums[digits_(num)]) { skipped++; return; }
@@ -303,6 +300,52 @@ function missedCalls_(dryRun) {
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
   Logger.log('Imported %s missed calls, skipped %s.', added.length, skipped);
   return added.length;
+}
+
+/**
+ * Read a missed-call notification.
+ *
+ * Current format is two lines - number and optional caller name, then the time:
+ *     +447818080205 Geoffrey Fernandez
+ *     1510
+ *
+ * An earlier format put everything on one line with the name glued straight
+ * onto the number:
+ *     +447411086500Bajram Auto Electrican 1006
+ *
+ * Both are handled. Taking the time from its own line matters: flattening the
+ * body first made a name ending in digits look like a timestamp.
+ */
+function parseMissedCall_(raw) {
+  var lines = String(raw || '').split(/\r?\n/).map(function (l) { return l.trim(); })
+                               .filter(function (l) { return l.length; });
+  if (!lines.length) return null;
+
+  // Leading run of digits/space/()/- , then anything else is the caller name.
+  var g = lines[0].match(/^(\+?[\d\s()-]+)(.*)$/);
+  if (!g) return null;
+  var numPart = g[1];
+  var name    = (g[2] || '').trim();
+  var time    = '';
+
+  // Preferred: a line that is nothing but the time.
+  for (var i = 1; i < lines.length; i++) {
+    var t = lines[i].match(/^(\d{3,4})$/);
+    if (t) { time = t[1]; break; }
+  }
+  // Older single-line formats: the time trails either the number or the name.
+  if (!time) {
+    var a = numPart.match(/\s(\d{3,4})\s*$/);
+    if (a) { time = a[1]; numPart = numPart.slice(0, a.index); }
+    else {
+      var b = name.match(/(\d{3,4})\s*$/);
+      if (b) { time = b[1]; name = name.slice(0, b.index).trim(); }
+    }
+  }
+
+  var number = numPart.replace(/[\s()-]/g, '');
+  if (number.replace(/\D/g, '').length < 7) return null;
+  return { number: number, name: name, time: time };
 }
 
 /** Compare numbers ignoring +44 / 0 / spacing. */
