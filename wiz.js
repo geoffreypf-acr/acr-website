@@ -6,7 +6,7 @@
   var WA_NUMBER = '447468844431';
   var ENQUIRY_EMAIL = 'info@acrautomobile.com';
   /* Google Sheet logging — paste your Apps Script Web App URL (see SETUP-google-sheet.md). Leave '' to disable. */
-  var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbywkNnoW4Nn5injAeEHZszQZFjwdGxxOJJI1DHmb4Fgud3HUZJfYPQZAsRIdsnwtzsWDw/exec';
+  var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyH3AZWwJwRs-guZUHtQdZG_-9wfajGhrkiFv2JMN_BrnB6KCJaJR4NQJdN69cSZOQRog/exec';
   var NL = String.fromCharCode(10);
 
   var MAKES = ['Aston Martin','Audi','Bentley','BMW','Ferrari','Ford','Jaguar','Lamborghini','Land Rover','Lexus','Maserati','McLaren','Mercedes-Benz','MINI','Porsche','Range Rover','Rolls-Royce','Tesla','Toyota','Volkswagen','Volvo','Other'];
