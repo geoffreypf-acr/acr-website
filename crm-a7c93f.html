@@ -573,16 +573,23 @@ window.__crmStart = function(){
     renderDash();
   }
 
+  /* Dashboard is a view of its own, not a strip above the board - showing the
+     pipeline underneath it just made the page long and neither readable. */
   (function(){
     var btn=$('dashToggle'), box=$('dash');
     if(!btn||!box) return;
-    if(localStorage.getItem('acr_crm_dash')!=='0'){ box.hidden=false; btn.classList.add('primary'); }
-    btn.addEventListener('click', function(){
-      box.hidden=!box.hidden;
-      btn.classList.toggle('primary', !box.hidden);
-      localStorage.setItem('acr_crm_dash', box.hidden?'0':'1');
-      renderDash();
-    });
+    function apply(on){
+      box.hidden = !on;
+      var tabs=$('tabs'), board=$('board');
+      if(tabs)  tabs.hidden  = on;
+      if(board) board.hidden = on;
+      btn.classList.toggle('primary', on);
+      btn.textContent = on ? '\u2190 Pipeline' : 'Dashboard';
+      localStorage.setItem('acr_crm_dash', on?'1':'0');
+      if(on) renderDash();
+    }
+    apply(localStorage.getItem('acr_crm_dash')==='1');   /* board is the default view */
+    btn.addEventListener('click', function(){ apply(box.hidden); });
   })();
 
   (function(){
