@@ -453,11 +453,18 @@ window.__crmStart = function(){
       var first = (e.name||'').toString().trim().split(/\s+/)[0] || '';
       var hi = first ? 'Hello ' + first + ',' : 'Hello,';
       var TPL = [
+        { id:'missed', label:'Missed call', subject:'Sorry we missed your call — ACR Automobile',
+          body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?\n\nKind regards,\nACR Automobile' },
         { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
           body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.\n\nKind regards,\nACR Automobile' },
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
           body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
       ];
+      if (/missed call/i.test(serviceOf(e))) {
+        TPL.sort(function(a,b){ return (a.id==='missed'?-1:0) - (b.id==='missed'?-1:0); });
+      } else {
+        TPL.sort(function(a,b){ return (a.id==='missed'?1:0) - (b.id==='missed'?1:0); });
+      }
       var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
       var mail = (e.email||'').toString().trim();
       if(!digits && !mail){ box.style.display='none'; box.innerHTML=''; return; }
