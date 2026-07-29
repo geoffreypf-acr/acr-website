@@ -136,13 +136,24 @@
   .banner a { color: var(--signal-300); }
 
   /* Stage tabs */
-  .tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
-  .tabs button { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 999px;
+  .tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 18px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .tabs button { flex: none; display: inline-flex; align-items: center; gap: 10px; padding: 13px 20px; border-radius: 999px;
     border: 1px solid var(--border-default); background: var(--surface-1); color: var(--text-secondary);
-    font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: border-color .15s, background .15s, color .15s; }
   .tabs button:hover { border-color: var(--border-strong); color: var(--text-primary); }
   .tabs button.on { background: var(--signal-500); border-color: var(--signal-500); color: #06212C; }
-  .tabs button .n { font-family: var(--font-mono); font-size: 11px; opacity: .75; }
+  /* count badge - the number is the point, so give it weight */
+  .tabs button .n { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px;
+    padding: 0 8px; border-radius: 999px; background: rgba(180,196,210,.12); color: var(--text-primary);
+    font-family: var(--font-display); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+  .tabs button.on .n { background: rgba(6,33,44,.22); color: #06212C; }
+  .tabs button .n.zero { opacity: .45; font-weight: 600; }
+  @media (max-width: 720px) {
+    .tabs { gap: 6px; margin-bottom: 14px; }
+    .tabs button { padding: 10px 14px; font-size: 13.5px; gap: 8px; }
+    .tabs button .n { min-width: 22px; height: 21px; font-size: 12.5px; padding: 0 6px; }
+  }
 
   /* Collapsible stage columns */
   .col-h { cursor: pointer; user-select: none; -webkit-user-select: none; }
@@ -444,7 +455,7 @@ window.__crmStart = function(){
     el.innerHTML = GROUPS.map(function(g){
       var n = g.stages ? live.filter(function(e){ return g.stages.indexOf(statusOf(e))>-1; }).length : live.length;
       return '<button type="button" data-tab="'+g.key+'"'+(curTab()===g.key?' class="on"':'')+'>'
-           +   esc(g.label)+'<span class="n">'+n+'</span></button>';
+           +   esc(g.label)+'<span class="n'+(n?'':' zero')+'">'+n+'</span></button>';
     }).join('');
     el.querySelectorAll('button[data-tab]').forEach(function(b){
       b.addEventListener('click', function(){
@@ -507,8 +518,11 @@ window.__crmStart = function(){
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
-        var ch=channelOf(e); if(ch) chips.push('<span class="chip">'+esc(ch)+'</span>');
-        var pc=prefContact(e); if(pc) chips.push('<span class="chip pref">'+esc(pc)+'</span>');
+        var ch=channelOf(e), pcv=prefContact(e);
+        /* don't print the same word twice - a phone lead replied to by phone
+           was showing "Phone" as both the channel and the preferred reply */
+        if(ch && ch.toLowerCase()!==pcv.toLowerCase()) chips.push('<span class="chip">'+esc(ch)+'</span>');
+        if(pcv) chips.push('<span class="chip pref">'+esc(pcv)+'</span>');
         card.innerHTML='<div class="nm">'+esc(e.name||'—')+'</div>'
           +'<div class="meta">'+esc([serviceOf(e),vehicle(e)].filter(Boolean).join(' · ')||'—')+'</div>'
           +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'');
