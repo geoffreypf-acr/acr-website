@@ -135,6 +135,15 @@
   .banner b { color: var(--warn-400); }
   .banner a { color: var(--signal-300); }
 
+  /* Stage tabs */
+  .tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+  .tabs button { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 999px;
+    border: 1px solid var(--border-default); background: var(--surface-1); color: var(--text-secondary);
+    font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .tabs button:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .tabs button.on { background: var(--signal-500); border-color: var(--signal-500); color: #06212C; }
+  .tabs button .n { font-family: var(--font-mono); font-size: 11px; opacity: .75; }
+
   /* Collapsible stage columns */
   .col-h { cursor: pointer; user-select: none; -webkit-user-select: none; }
   .col-h .caret { margin-left: 8px; font-size: 11px; color: var(--text-muted); transition: transform .15s; }
@@ -220,6 +229,8 @@
   </div>
 
   <div class="banner" id="banner"></div>
+  <div class="tabs" id="tabs"></div>
+
   <div class="dash" id="dash" hidden>
     <div class="dash-tiles" id="dashTiles"></div>
     <div class="dash-charts">
@@ -284,10 +295,12 @@ window.__crmStart = function(){
     { key:'New',       color:'#8FD6EE' },
     { key:'Contacted', color:'#B3BCC2' },
     { key:'Quoted',    color:'#DFAE4E' },
-    { key:'Booked',    color:'#57BBDF' },
-    { key:'Completed', color:'#1F8A5B' },
-    { key:'On Hold',   color:'#9B8CC4' },
-    { key:'Lost',      color:'#E0695B' }
+    { key:'Booked',       color:'#57BBDF' },
+    { key:'Deposit paid', color:'#4FA3A5' },
+    { key:'Invoice sent', color:'#C98A5E' },
+    { key:'Completed',    color:'#1F8A5B' },
+    { key:'On Hold',      color:'#9B8CC4' },
+    { key:'Lost',         color:'#E0695B' }
   ];
   var $ = function(id){ return document.getElementById(id); };
   var data = [];          // all enquiries
@@ -408,6 +421,33 @@ window.__crmStart = function(){
     }).join('');
   }
 
+  /* Top-level views. Keeps the working pipeline free of closed-out records. */
+  var GROUPS = [
+    { key:'pipeline',  label:'Pipeline',  stages:['New','Contacted','Quoted','Booked','Deposit paid','Invoice sent'] },
+    { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
+    { key:'completed', label:'Completed', stages:['Completed'] },
+    { key:'lost',      label:'Lost',      stages:['Lost'] },
+    { key:'all',       label:'All',       stages:null }
+  ];
+  var TAB_KEY='acr_crm_tab';
+  function curTab(){ return localStorage.getItem(TAB_KEY) || 'pipeline'; }
+  function groupOf(k){ return GROUPS.filter(function(g){ return g.key===k; })[0] || GROUPS[0]; }
+  function renderTabs(){
+    var el=$('tabs'); if(!el) return;
+    var live=data.filter(function(e){ return !isDeleted(e); });
+    el.innerHTML = GROUPS.map(function(g){
+      var n = g.stages ? live.filter(function(e){ return g.stages.indexOf(statusOf(e))>-1; }).length : live.length;
+      return '<button type="button" data-tab="'+g.key+'"'+(curTab()===g.key?' class="on"':'')+'>'
+           +   esc(g.label)+'<span class="n">'+n+'</span></button>';
+    }).join('');
+    el.querySelectorAll('button[data-tab]').forEach(function(b){
+      b.addEventListener('click', function(){
+        localStorage.setItem(TAB_KEY, b.getAttribute('data-tab'));
+        render();
+      });
+    });
+  }
+
   /* Which stage columns are collapsed. Remembered per device. */
   var CLOSED_KEY='acr_crm_closed';
   function closedSet(){
@@ -432,7 +472,9 @@ window.__crmStart = function(){
     var q = ($('search').value||'').toLowerCase().trim();
     var board = $('board'); board.innerHTML='';
     var due = 0;
-    STAGES.forEach(function(s){
+    var g = groupOf(curTab());
+    var shown = STAGES.filter(function(st){ return !g.stages || g.stages.indexOf(st.key)>-1; });
+    shown.forEach(function(s){
       var items = data.filter(function(e){ return !isDeleted(e) && statusOf(e)===s.key; })
         .filter(function(e){ if(!q) return true; return (e.name+' '+vehicle(e)+' '+serviceOf(e)+' '+(e.email||'')).toLowerCase().indexOf(q)>-1; })
         .sort(function(a,b){ return new Date(b.timestamp||0)-new Date(a.timestamp||0); });
@@ -474,13 +516,14 @@ window.__crmStart = function(){
       board.appendChild(col);
     });
     var pill=$('fuPill'); pill.textContent = due+' follow-up'+(due===1?'':'s')+' due'; pill.className='pill'+(due?'':' zero');
+    renderTabs();
     renderDash();
   }
 
   (function(){
     var btn=$('dashToggle'), box=$('dash');
     if(!btn||!box) return;
-    if(localStorage.getItem('acr_crm_dash')==='1'){ box.hidden=false; btn.classList.add('primary'); }
+    if(localStorage.getItem('acr_crm_dash')!=='0'){ box.hidden=false; btn.classList.add('primary'); }
     btn.addEventListener('click', function(){
       box.hidden=!box.hidden;
       btn.classList.toggle('primary', !box.hidden);
