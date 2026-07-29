@@ -158,6 +158,35 @@ function onOpen() {
     .addToUi();
 }
 
+/**
+ * Lets the CRM trigger a sync on demand ("Force pull").
+ *
+ * TO ENABLE:
+ *   1. Deploy → New deployment → type: Web app
+ *   2. Execute as: Me     Who has access: Anyone
+ *   3. Deploy, copy the /exec URL
+ *   4. In the CRM press "Force pull" and paste that URL when asked - it is
+ *      remembered on that device
+ *
+ * Deploying THIS project is safe. Do not create a new deployment of the CRM's
+ * own script, as that would issue a new /exec URL and break the website.
+ */
+function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) || '';
+  if (action !== 'sync') {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unknown action' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var out;
+  try {
+    out = { ok: true, email: run_(false), calls: missedCalls_(false), at: new Date().toISOString() };
+  } catch (err) {
+    out = { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // ─────────────────────────── Implementation ───────────────────────────
 
 function run_(dryRun) {

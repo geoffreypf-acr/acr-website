@@ -249,6 +249,7 @@
     <span class="pill zero" id="fuPill">0 follow-ups due</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="signOut" title="Lock the CRM on this device">Sign out</button>
+    <button class="crm-btn" id="forcePull" title="Pull new emails and missed calls from Gmail now">Force pull</button>
     <button class="crm-btn" id="refresh">Refresh</button>
     <a class="crm-btn primary" href="booking-console-a7c93f.html">Booking console →</a>
   </div>
@@ -774,6 +775,42 @@ window.__crmStart = function(){
         render();   /* keep the tabs and empty columns on screen rather than a blank page */
       });
   }
+  /* Force pull: asks the Gmail sync script to run now, then re-reads the sheet.
+     Apps Script does not send CORS headers, so the call is fire-and-forget and
+     we simply reload after giving it time to finish. */
+  (function(){
+    var btn=$('forcePull'); if(!btn) return;
+    var KEY='acr_crm_sync_url';
+    btn.addEventListener('click', function(){
+      var url = localStorage.getItem(KEY) || '';
+      if(!url){
+        url = (window.prompt('Paste the Gmail sync web-app URL\n\nApps Script → Deploy → New deployment → Web app\n(Execute as: Me, Access: Anyone), then copy the /exec URL.') || '').trim();
+        if(!url) return;
+        if(url.indexOf('script.google.com')<0){ alert('That does not look like an Apps Script /exec URL.'); return; }
+        localStorage.setItem(KEY, url);
+      }
+      btn.disabled=true; btn.textContent='Pulling…';
+      try {
+        fetch(url + (url.indexOf('?')>-1?'&':'?') + 'action=sync', {method:'GET', mode:'no-cors', cache:'no-store'})
+          .catch(function(){});
+      } catch(err){}
+      var left=10;
+      var tick=setInterval(function(){
+        left--; btn.textContent='Pulling… '+left;
+        if(left<=0){
+          clearInterval(tick);
+          btn.disabled=false; btn.textContent='Force pull';
+          load(1);
+        }
+      }, 1000);
+    });
+    /* long-press / right-click to change or clear the saved URL */
+    btn.addEventListener('contextmenu', function(ev){
+      ev.preventDefault();
+      if(confirm('Forget the saved sync URL on this device?')) localStorage.removeItem(KEY);
+    });
+  })();
+
   $('refresh').addEventListener('click', function(){ load(1); });
   $('search').addEventListener('input', render);
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDrawer(); });
