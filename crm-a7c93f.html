@@ -350,6 +350,7 @@ window.__crmStart = function(){
   var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyH3AZWwJwRs-guZUHtQdZG_-9wfajGhrkiFv2JMN_BrnB6KCJaJR4NQJdN69cSZOQRog/exec';
   var STAGES = [
     { key:'New',       color:'#8FD6EE' },
+    { key:'Call back',    color:'#E8A33D' },
     { key:'Contacted', color:'#B3BCC2' },
     { key:'Quoted',    color:'#DFAE4E' },
     { key:'Booked',       color:'#57BBDF' },
@@ -509,7 +510,7 @@ window.__crmStart = function(){
   function periodStats_(list, unit, now){
     var dates = list.map(function(e){ return e.timestamp ? new Date(e.timestamp) : null; })
                     .filter(function(d){ return d && !isNaN(d); });
-    if(dates.length < 2) return null;
+    if(!dates.length) return null;
     var first = new Date(Math.min.apply(null, dates));
     var keyOf, labelOf, step;
     if(unit==='week'){
@@ -527,7 +528,7 @@ window.__crmStart = function(){
     while(cur <= now){ counts[keyOf(cur)] = 0; cur = step(cur); }
     dates.forEach(function(d){ var k=keyOf(d); if(k in counts) counts[k]++; });
     var keys=Object.keys(counts);
-    if(keys.length < 2) return null;
+    if(!keys.length) return null;
     var best=keys[0], worst=keys[0];
     keys.forEach(function(k){
       if(counts[k] > counts[best])   best  = k;
@@ -577,9 +578,9 @@ window.__crmStart = function(){
               + '<span class="v'+(which==='worst'?' low':'')+'">'+st[which].n+'</span></div>');
     }
     add('Busiest week',  wk, 'best');
-    add('Quietest week', wk, 'worst');
+    if(wk && wk.periods>1) add('Quietest week', wk, 'worst');
     add('Busiest month', mo, 'best');
-    add('Quietest month',mo, 'worst');
+    if(mo && mo.periods>1) add('Quietest month', mo, 'worst');
     el.innerHTML = rows.join('')
       + (mo && mo.periods<3 ? '<div class="empty" style="margin-top:10px">Based on '+mo.periods+' months of data.</div>' : '');
   }
@@ -645,7 +646,7 @@ window.__crmStart = function(){
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
   var GROUPS = [
-    { key:'pipeline',  label:'Pipeline',  stages:['New','Contacted','Quoted','Booked','Deposit paid','Invoice sent','On Hold','Completed','Lost'] },
+    { key:'pipeline',  label:'Pipeline',  stages:['New','Call back','Contacted','Quoted','Booked','Deposit paid','Invoice sent','On Hold','Completed','Lost'] },
     { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
     { key:'archive',   label:'Archive',   stages:['Archive','Completed','Lost'] },
     { key:'all',       label:'All',       stages:null }
@@ -823,7 +824,7 @@ window.__crmStart = function(){
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
           body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
       ];
-      if (/missed call/i.test(serviceOf(e))) {
+      if (/missed call/i.test(serviceOf(e)) || statusOf(e)==='Call back') {
         TPL.sort(function(a,b){ return (a.id==='missed'?-1:0) - (b.id==='missed'?-1:0); });
       } else {
         TPL.sort(function(a,b){ return (a.id==='missed'?1:0) - (b.id==='missed'?1:0); });
