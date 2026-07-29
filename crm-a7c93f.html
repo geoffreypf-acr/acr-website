@@ -135,11 +135,39 @@
   .banner b { color: var(--warn-400); }
   .banner a { color: var(--signal-300); }
 
+  /* Collapsible stage columns */
+  .col-h { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .col-h .caret { margin-left: 8px; font-size: 11px; color: var(--text-muted); transition: transform .15s; }
+  .col.closed .col-h .caret { transform: rotate(-90deg); }
+  .col.closed .col-body, .col.closed .col-sum { display: none; }
+  .col-h:active { opacity: .75; }
+
   @media (max-width: 720px) {
-    .crm-shell { padding: 14px 12px 50px; }
-    .board { grid-auto-flow: row; grid-auto-columns: auto; }
-    .crm-head h1 { font-size: 22px; }
-    .crm-search { flex: 1; min-width: 0; }
+    .crm-shell { padding: 12px 10px 60px; }
+    .board { grid-auto-flow: row; grid-auto-columns: auto; gap: 10px; }
+    .crm-head { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
+    .crm-head h1 { font-size: 20px; width: auto; }
+    .crm-head .spacer { display: none; }
+    .crm-search { order: 10; flex: 1 1 100%; min-width: 0; }
+    .crm-btn, .crm-btn.primary { padding: 9px 12px; font-size: 13px; }
+    .pill { font-size: 11.5px; }
+    /* dashboard: two tiles per row, roomier charts */
+    .dash-tiles { grid-template-columns: 1fr 1fr; gap: 9px; }
+    .tile { padding: 12px 12px; }
+    .tile .v { font-size: 22px; }
+    .tile .k { font-size: 9.5px; }
+    .tile .s { font-size: 11px; }
+    .dash-charts { grid-template-columns: 1fr; gap: 10px; }
+    .cols { height: 100px; }
+    /* drawer fills the screen */
+    .drawer { width: 100%; max-width: none; }
+    .dactions a { min-width: 0; font-size: 12.5px; }
+    .dtpl .tpl-name { flex: 1 1 100%; }
+    .dtpl a, .dtpl button { min-width: 0; font-size: 12px; padding: 0 8px; }
+  }
+  @media (max-width: 400px) {
+    .dash-tiles { grid-template-columns: 1fr 1fr; }
+    .tile .v { font-size: 20px; }
   }
   /* Gate */
   #gate { position: fixed; inset: 0; z-index: 9999; background: var(--bg-base); display: grid; place-items: center; padding: 22px; }
@@ -196,8 +224,8 @@
     <div class="dash-tiles" id="dashTiles"></div>
     <div class="dash-charts">
       <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
-      <div class="dcard"><h3>Where they came from</h3><div class="bars" id="chSource"></div></div>
-      <div class="dcard"><h3>Top services</h3><div class="bars" id="chService"></div></div>
+      <div class="dcard"><h3>By category</h3><div class="bars" id="chSource"></div></div>
+      <div class="dcard"><h3>How they reached us</h3><div class="bars" id="chService"></div></div>
       <div class="dcard"><h3>Enquiries, last 8 weeks</h3><div class="cols" id="chWeeks"></div></div>
     </div>
   </div>
@@ -276,6 +304,30 @@ window.__crmStart = function(){
   function fuDate(e){ if(!e.followup) return null; var d=new Date(e.followup); return isNaN(d)?null:d; }
   function isOverdue(e){ var d=fuDate(e); if(!d) return false; var st=statusOf(e); if(st==='Completed'||st==='Lost') return false; return d<=today(); }
   function vehicle(e){ return [e.make,e.model].filter(Boolean).join(' '); }
+  /* Turn raw service/source text into something readable on a card. */
+  var CATS = [
+    ['Missed call',        /missed call/i],
+    ['Trade & dealership', /dealership|trade rate|referral/i],
+    ['Vehicle security',   /tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security assessment|security/i],
+    ['CarPlay & Android',  /carplay|car ?play|android auto/i],
+    ['Dash cameras',       /dash ?cam|thinkware/i],
+    ['BMW & MINI',         /idrive|i-drive|coding|software recovery|bmw ?\/? ?mini/i],
+    ['Battery & recovery', /battery|recovery|jump ?start/i],
+    ['Concierge',          /concierge|storage|detailing|chauffeur|sourcing/i]
+  ];
+  function categoryOf(e){
+    var hay = [serviceOf(e), e.source||'', e.details||''].join(' ');
+    for(var i=0;i<CATS.length;i++){ if(CATS[i][1].test(hay)) return CATS[i][0]; }
+    return 'Other';
+  }
+  /* How the enquiry reached us. */
+  function channelOf(e){
+    var src=(e.source||'').toLowerCase();
+    if(src==='phone') return 'Phone';
+    if(src==='gmail') return 'Email';
+    if(src) return 'Website';
+    return '';
+  }
   function serviceOf(e){ return e.service||e.interested||e.interestedIn||''; }
   function prefContact(e){ return (e.preferredReply||e.preferredreply||e.preferred||'').toString().trim(); }
   function isDeleted(e){ var v=(e.deleted||'').toString().toLowerCase(); return v==='true'||v==='1'||v==='yes'; }
@@ -338,8 +390,8 @@ window.__crmStart = function(){
     }).join('');
     var cnt=function(arr, fn){ var m={}; arr.forEach(function(e){ var k=(fn(e)||'').toString().trim(); if(k) m[k]=(m[k]||0)+1; }); return Object.keys(m).map(function(k){ return [k,m[k]]; }); };
     bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }));
-    bars('chSource',  cnt(live, function(e){ return (e.source||'').replace(/\.html$/,'').replace(/-/g,' '); }));
-    bars('chService', cnt(live, function(e){ return serviceOf(e).split(',')[0]; }));
+    bars('chSource',  cnt(live, categoryOf));
+    bars('chService', cnt(live, channelOf));
     var cols=[], w=weekStart(now);
     for(var i=7;i>=0;i--){
       var a=new Date(w); a.setDate(a.getDate()-i*7); var b=new Date(a); b.setDate(b.getDate()+7);
@@ -356,6 +408,26 @@ window.__crmStart = function(){
     }).join('');
   }
 
+  /* Which stage columns are collapsed. Remembered per device. */
+  var CLOSED_KEY='acr_crm_closed';
+  function closedSet(){
+    try { return JSON.parse(localStorage.getItem(CLOSED_KEY)||'[]'); } catch(e){ return []; }
+  }
+  function isClosed(k){ return closedSet().indexOf(k)>-1; }
+  function setClosed(k, on){
+    var a=closedSet(), i=a.indexOf(k);
+    if(on && i<0) a.push(k); if(!on && i>-1) a.splice(i,1);
+    try { localStorage.setItem(CLOSED_KEY, JSON.stringify(a)); } catch(e){}
+  }
+  /* First visit on a small screen: collapse the closed-out stages so the
+     board opens on what still needs working. */
+  (function(){
+    if(localStorage.getItem(CLOSED_KEY)) return;
+    if(window.matchMedia && window.matchMedia('(max-width: 720px)').matches){
+      try { localStorage.setItem(CLOSED_KEY, JSON.stringify(['Completed','Lost','On Hold'])); } catch(e){}
+    }
+  })();
+
   function render(){
     var q = ($('search').value||'').toLowerCase().trim();
     var board = $('board'); board.innerHTML='';
@@ -367,9 +439,15 @@ window.__crmStart = function(){
       var sum = items.reduce(function(t,e){ return t+valNum(e); },0);
       var col = document.createElement('div'); col.className='col'; col.dataset.stage=s.key;
       col.innerHTML = '<div class="col-h"><span class="col-dot" style="background:'+s.color+'"></span>'
-        + '<span class="nm">'+s.key+'</span><span class="ct">'+items.length+'</span></div>'
-        + (sum? '<div class="col-h" style="padding-top:0"><span class="sum" style="margin-left:18px">'+money(sum)+'</span></div>' : '')
+        + '<span class="nm">'+s.key+'</span><span class="ct">'+items.length+'</span>'
+        + '<span class="caret">&#9660;</span></div>'
+        + (sum? '<div class="col-h col-sum" style="padding-top:0;cursor:default"><span class="sum" style="margin-left:18px">'+money(sum)+'</span></div>' : '')
         + '<div class="col-body"></div>';
+      if(isClosed(s.key)) col.classList.add('closed');
+      col.querySelector('.col-h').addEventListener('click', function(){
+        col.classList.toggle('closed');
+        setClosed(s.key, col.classList.contains('closed'));
+      });
       var body = col.querySelector('.col-body');
       if(!items.length){ body.innerHTML='<div class="empty-col">—</div>'; }
       items.forEach(function(e){
@@ -380,7 +458,8 @@ window.__crmStart = function(){
         var fn=fnum(e); if(fn) chips.push('<span class="chip fnum n'+fn+'">Follow-up '+fn+'</span>');
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
-        if(e.source) chips.push('<span class="chip">'+esc(String(e.source).replace('.html',''))+'</span>');
+        var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
+        var ch=channelOf(e); if(ch) chips.push('<span class="chip">'+esc(ch)+'</span>');
         var pc=prefContact(e); if(pc) chips.push('<span class="chip pref">'+esc(pc)+'</span>');
         card.innerHTML='<div class="nm">'+esc(e.name||'—')+'</div>'
           +'<div class="meta">'+esc([serviceOf(e),vehicle(e)].filter(Boolean).join(' · ')||'—')+'</div>'

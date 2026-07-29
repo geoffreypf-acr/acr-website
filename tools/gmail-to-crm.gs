@@ -65,6 +65,12 @@ var CFG = {
   // Don't raise a second lead if that number is already open on the board.
   SKIP_IF_OPEN: true,
 
+  // Historic calls you have already dealt with shouldn't land in "New".
+  // Anything older than this many days is imported with BACKFILL_STATUS
+  // instead, so the New column only holds calls that still need returning.
+  BACKFILL_AFTER_DAYS: 3,
+  BACKFILL_STATUS: 'On Hold',
+
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
     'formsubmit.co',        // already captured by the website forms
@@ -129,6 +135,27 @@ function removeGmailTrigger() {
     if (f === 'syncGmailToCrm' || f === 'syncAll') ScriptApp.deleteTrigger(t);
   });
   Logger.log('Hourly sync removed.');
+}
+
+/**
+ * Adds an "ACR CRM" menu to the spreadsheet so you can pull new data on demand
+ * without opening the script editor.
+ *
+ * This only appears if the script is BOUND to the sheet - i.e. you created it
+ * from the sheet via Extensions → Apps Script. If you made a standalone script
+ * the menu will not show, and you run the functions from the editor instead.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('ACR CRM')
+    .addItem('Sync now (email + missed calls)', 'syncAll')
+    .addSeparator()
+    .addItem('Dry run — email enquiries', 'dryRunGmailToCrm')
+    .addItem('Dry run — missed calls', 'dryRunMissedCalls')
+    .addSeparator()
+    .addItem('Turn hourly sync ON', 'installGmailTrigger')
+    .addItem('Turn hourly sync OFF', 'removeGmailTrigger')
+    .addToUi();
 }
 
 // ─────────────────────────── Implementation ───────────────────────────
@@ -280,7 +307,7 @@ function missedCalls_(dryRun) {
       mobile:         num,
       service:        'Missed call',
       source:         'phone',
-      status:         'New',
+      status:         ageDays_(msg.getDate()) > CFG.BACKFILL_AFTER_DAYS ? CFG.BACKFILL_STATUS : 'New',
       preferredReply: 'Phone',
       details:        'Missed call' + (when ? ' at ' + when.slice(0,-2) + ':' + when.slice(-2) : '') + (known ? ' — known contact: ' + known : ''),
       threadId:       id
@@ -346,6 +373,11 @@ function parseMissedCall_(raw) {
   var number = numPart.replace(/[\s()-]/g, '');
   if (number.replace(/\D/g, '').length < 7) return null;
   return { number: number, name: name, time: time };
+}
+
+/** How many days ago was this? */
+function ageDays_(d) {
+  return (new Date().getTime() - new Date(d).getTime()) / 86400000;
 }
 
 /** Compare numbers ignoring +44 / 0 / spacing. */
