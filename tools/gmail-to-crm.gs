@@ -275,7 +275,7 @@ function missedCalls_(dryRun) {
       if (tidCol > -1 && r[tidCol]) seen[String(r[tidCol]).trim()] = true;
       if (CFG.SKIP_IF_OPEN && mobCol > -1 && r[mobCol]) {
         var st = stCol > -1 ? String(r[stCol]||'').trim() : '';
-        if (st !== 'Completed' && st !== 'Lost') openNums[digits_(r[mobCol])] = true;
+        if (st !== 'Completed' && st !== 'Lost' && st !== 'Archive') openNums[digits_(r[mobCol])] = true;
       }
     });
   }
