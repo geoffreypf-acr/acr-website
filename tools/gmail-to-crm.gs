@@ -30,24 +30,50 @@ var CFG = {
   DAYS_BACK:  30,           // how far back to look on each run
   MAX_THREADS: 100,         // safety cap per run
 
+  // Only mail Gmail itself classifies as Primary. This alone removes
+  // Promotions, Social, Updates and Forums - i.e. most marketing.
+  PRIMARY_ONLY: true,
+
+  // Skip anything carrying a List-Unsubscribe header. Bulk senders are
+  // legally obliged to include it, genuine person-to-person mail never does.
+  // This is the filter that catches newsletters no denylist would predict.
+  SKIP_BULK: true,
+
+  // Require some sign the message is actually about our work. Set to false if
+  // you would rather see everything and triage it yourself.
+  REQUIRE_KEYWORDS: true,
+  KEYWORDS: [
+    'tracker', 'track', 'immobiliser', 'immobilizer', 'ghost', 'meta trak',
+    'carplay', 'car play', 'android auto', 'dash cam', 'dashcam', 'dash camera',
+    'idrive', 'i-drive', 'retrofit', 'reverse camera', 'parking sensor',
+    'thatcham', 's5', 's7', 'deadlock', 'security', 'stolen', 'theft', 'keyless',
+    'quote', 'price', 'cost', 'how much', 'fitting', 'fit a', 'install',
+    'booking', 'book in', 'appointment', 'enquiry', 'enquire', 'availability'
+  ],
+
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
     'formsubmit.co',        // already captured by the website forms
-    'noreply', 'no-reply', 'donotreply', 'do-not-reply',
+    'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'notifications@',
     'notification@slack.com', 'slack.com',
-    'google.com', 'googlemail.com', 'gmail-noreply',
-    'vercel.com', 'netlify.com', 'github.com',
-    'stripe.com', 'paypal', 'xero.com', 'quickbooks',
-    'mailchimp', 'sendgrid', 'hubspot', 'squareup.com',
+    'google.com', 'googlemail.com', 'gmail-noreply', 'accounts.google',
+    'vercel.com', 'netlify.com', 'github.com', 'supabase',
+    'stripe.com', 'paypal', 'xero.com', 'quickbooks', 'capitalontap',
+    'mailchimp', 'sendgrid', 'hubspot', 'squareup.com', 'square.com',
+    'virginmedia', 'vodafone', 'ee.co.uk', 'o2.co.uk', 'bt.com',
+    'metatrak.co.uk', 'meta-trak',   // supplier newsletters, not customers
+    'linkedin', 'facebook', 'instagram', 'tiktok', 'x.com',
     'acrautomobile.com'     // ourselves
   ],
 
   // Subjects that are clearly not enquiries.
   IGNORE_SUBJECTS: [
-    'invoice', 'receipt', 'statement', 'subscription',
-    'security alert', 'sign-in', 'password', 'verify your',
-    'newsletter', 'unsubscribe', 'delivery', 'dispatched',
-    'out of office', 'automatic reply'
+    'invoice', 'receipt', 'statement', 'subscription', 'direct debit',
+    'payment', 'quickpay', 'bill', 'renewal notice', 'top up',
+    'security alert', 'sign-in', 'password', 'verify your', 'confirm your',
+    'newsletter', 'unsubscribe', 'webinar', 'offer', 'sale', 'discount',
+    'delivery', 'dispatched', 'shipped', 'order confirmation',
+    'out of office', 'automatic reply', 'undeliverable', 'mail delivery'
   ]
 };
 
@@ -110,7 +136,9 @@ function run_(dryRun) {
     });
   }
 
-  var query = 'to:info@acrautomobile.com -in:chats -in:draft newer_than:' + CFG.DAYS_BACK + 'd';
+  var query = 'to:info@acrautomobile.com -in:chats -in:draft -in:spam -in:trash'
+            + (CFG.PRIMARY_ONLY ? ' category:primary' : '')
+            + ' newer_than:' + CFG.DAYS_BACK + 'd';
   var threads = GmailApp.search(query, 0, CFG.MAX_THREADS);
   var added = [], skipped = 0;
 
@@ -124,10 +152,13 @@ function run_(dryRun) {
     var subject = (thread.getFirstMessageSubject() || '').trim();
 
     if (isIgnoredSender_(from) || isIgnoredSubject_(subject)) { skipped++; return; }
+    if (CFG.SKIP_BULK && isBulk_(first)) { skipped++; return; }
 
     var email = (from.match(/<([^>]+)>/) || [null, from])[1].trim().toLowerCase();
     var name  = (from.replace(/<[^>]*>/, '').replace(/["']/g, '').trim()) || email.split('@')[0];
     var body  = (first.getPlainBody() || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+
+    if (CFG.REQUIRE_KEYWORDS && !hasKeyword_(subject + ' ' + body)) { skipped++; return; }
 
     added.push({
       id: id,
@@ -164,6 +195,25 @@ function run_(dryRun) {
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
   Logger.log('Imported %s new enquiries, skipped %s.', added.length, skipped);
   return added.length;
+}
+
+/** Bulk mail carries List-Unsubscribe (or Precedence: bulk). People do not. */
+function isBulk_(msg) {
+  try {
+    if (msg.getHeader('List-Unsubscribe')) return true;
+    if (msg.getHeader('List-Id')) return true;
+    var p = (msg.getHeader('Precedence') || '').toLowerCase();
+    if (p === 'bulk' || p === 'list' || p === 'junk') return true;
+    var a = (msg.getHeader('Auto-Submitted') || '').toLowerCase();
+    if (a && a !== 'no') return true;
+  } catch (e) { /* older runtimes lack getHeader - fall through */ }
+  return false;
+}
+
+/** Does the message actually mention anything we do? */
+function hasKeyword_(text) {
+  var t = (text || '').toLowerCase();
+  return CFG.KEYWORDS.some(function (k) { return t.indexOf(k) > -1; });
 }
 
 function isIgnoredSender_(from) {
