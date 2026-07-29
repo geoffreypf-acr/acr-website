@@ -790,19 +790,45 @@ window.__crmStart = function(){
         localStorage.setItem(KEY, url);
       }
       btn.disabled=true; btn.textContent='Pulling…';
+      var before = data.length;
       try {
         fetch(url + (url.indexOf('?')>-1?'&':'?') + 'action=sync', {method:'GET', mode:'no-cors', cache:'no-store'})
           .catch(function(){});
       } catch(err){}
-      var left=10;
-      var tick=setInterval(function(){
-        left--; btn.textContent='Pulling… '+left;
-        if(left<=0){
-          clearInterval(tick);
-          btn.disabled=false; btn.textContent='Force pull';
-          load(1);
-        }
-      }, 1000);
+
+      /* Apps Script usually takes 5-30s. Rather than guess, poll the sheet
+         until the record count changes, then stop. */
+      var waited=0, MAX=45;
+      function done(msg){
+        btn.disabled=false; btn.textContent='Force pull';
+        if(msg && typeof showToast==='function') showToast(msg);
+      }
+      function poll(){
+        waited += 5;
+        btn.textContent='Pulling… '+waited+'s';
+        fetch(SHEET_ENDPOINT, {method:'GET', cache:'no-store'})
+          .then(function(r){ return r.text(); })
+          .then(function(txt){
+            var rows=JSON.parse(txt);
+            var list=(Array.isArray(rows)?rows:(rows.enquiries||[]))
+              .filter(function(e){ return e.timestamp || e.name || e.email; });
+            if(list.length !== before){
+              var n = list.length - before;
+              data = list;
+              $('banner').style.display='none';
+              render();
+              done(n>0 ? (n+' new '+(n===1?'enquiry':'enquiries')+' pulled in') : 'Up to date');
+              return;
+            }
+            if(waited>=MAX){ load(1); done('Nothing new'); return; }
+            setTimeout(poll, 5000);
+          })
+          .catch(function(){
+            if(waited>=MAX){ load(1); done('Could not confirm - try Refresh'); return; }
+            setTimeout(poll, 5000);
+          });
+      }
+      setTimeout(poll, 5000);
     });
     /* long-press / right-click to change or clear the saved URL */
     btn.addEventListener('contextmenu', function(ev){
