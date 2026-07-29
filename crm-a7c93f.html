@@ -75,17 +75,17 @@
   /* Drawer */
   .drawer-bg { position: fixed; inset: 0; background: rgba(6,15,22,.55); z-index: 80; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .drawer-bg.open { opacity: 1; pointer-events: auto; }
-  .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 100vw; background: var(--surface-1); border-left: 1px solid var(--border-default); z-index: 81; transform: translateX(100%); transition: transform .22s var(--ease-out, ease); display: flex; flex-direction: column; }
+  .drawer { box-sizing: border-box; position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 100vw; overflow-x: hidden; background: var(--surface-1); border-left: 1px solid var(--border-default); z-index: 81; transform: translateX(100%); transition: transform .22s var(--ease-out, ease); display: flex; flex-direction: column; }
   .drawer.open { transform: none; }
   .drawer-h { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 16px; border-bottom: 1px solid var(--border-subtle); }
   .drawer-h .nm { font-family: var(--font-display); font-weight: 400; font-size: 22px; letter-spacing: .02em; }
   .drawer-h .sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
   .drawer-h .x { margin-left: auto; background: transparent; border: none; color: var(--text-muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 7px; }
   .drawer-h .x:hover { color: var(--text-primary); background: var(--surface-inset); }
-  .drawer-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-  .dfield { display: flex; flex-direction: column; gap: 7px; }
+  .drawer-body { padding: 18px 20px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 15px; }
+  .dfield { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
   .dfield label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
-  .dfield input, .dfield select, .dfield textarea { height: 46px; padding: 0 13px; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; width: 100%; }
+  .dfield input, .dfield select, .dfield textarea { box-sizing: border-box; height: 46px; padding: 0 13px; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; width: 100%; }
   .dfield textarea { height: auto; min-height: 90px; padding: 11px 13px; line-height: 1.5; resize: vertical; }
   .fu-quick { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
   .fu-quick button { flex: 1; min-width: 68px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; cursor: pointer; }
@@ -138,6 +138,10 @@
   .banner b { color: var(--warn-400); }
   .banner a { color: var(--signal-300); }
 
+  /* An author `display` beats the browser's [hidden] rule, so .tabs (flex) and
+     .board (grid) stayed visible when the dashboard hid them. */
+  [hidden] { display: none !important; }
+
   /* Stage tabs */
   .tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 18px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
   .tabs button { flex: none; display: inline-flex; align-items: center; gap: 10px; padding: 13px 20px; border-radius: 999px;
@@ -189,7 +193,10 @@
     .dtpl a, .dtpl button { min-width: 0; font-size: 12px; padding: 0 8px; }
   }
   @media (max-width: 470px) {
-    .drawer { width: 100%; }
+    .drawer { width: 100vw; }
+    .drawer-body { padding: 16px 14px; }
+    .dactions { gap: 6px; }
+    .dfield select, .dfield input { font-size: 14px; }
   }
   @media (max-width: 400px) {
     .dash-tiles { grid-template-columns: 1fr 1fr; }
