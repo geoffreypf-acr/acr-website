@@ -32,7 +32,7 @@
     .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
     .tile .v { font-family: var(--font-display); font-size: 27px; font-weight: 700; color: var(--text-primary); line-height: 1.15; margin-top: 7px; letter-spacing: -.01em; }
     .tile .s { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
-    .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 12px; }
+    .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 12px; align-items: start; }
     .dcard { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px 17px; }
     .dcard h3 { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin: 0 0 13px; }
     .dcard-h { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
@@ -48,9 +48,12 @@
     .bars .track { grid-column: 1 / -1; height: 8px; background: rgba(180,196,210,.07); border-radius: 4px; overflow: hidden; }
     .bars .fill { height: 100%; background: #2FA1CC; border-radius: 4px; min-width: 3px; }
     /* weekly columns - single series */
-    .cols { display: flex; align-items: flex-end; gap: 6px; height: 118px; }
+    .cols { display: flex; align-items: flex-end; gap: 6px; height: 140px; }
+    .cols.many { gap: 3px; }
+    .cols.many .wl { font-size: 9.5px; }
     .cols .c { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; height: 100%; }
     .cols .bar { width: 100%; background: #2FA1CC; border-radius: 4px 4px 0 0; min-height: 2px; }
+    .cols .bar.zero { background: rgba(180,196,210,.16); }
     .cols .wl { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
     .cols .cv { font-size: 11px; color: var(--text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
     @media (max-width: 640px) { .dash-charts { grid-template-columns: 1fr; } }
@@ -537,12 +540,14 @@ window.__crmStart = function(){
     var titleEl=$('chWeeksTitle');
     if(titleEl) titleEl.textContent = 'Enquiries, ' + rangeLabel_(range);
     var mx=Math.max(1, Math.max.apply(null, cols.map(function(c){ return c[1]; })));
-    $('chWeeks').innerHTML = cols.map(function(c){
-      var h=Math.max(2, Math.round(c[1]/mx*84));
+    var wrap=$('chWeeks');
+    wrap.className = 'cols' + (cols.length>8 ? ' many' : '');
+    wrap.innerHTML = cols.map(function(c){
+      var h = c[1] ? Math.max(6, Math.round(c[1]/mx*104)) : 2;
       var lab=c[0];
       return '<div class="c" title="'+esc(lab)+': '+c[1]+' enquir'+(c[1]===1?'y':'ies')+'">'
            +   '<span class="cv">'+(c[1]||'')+'</span>'
-           +   '<span class="bar" style="height:'+h+'px"></span>'
+           +   '<span class="bar'+(c[1]?'':' zero')+'" style="height:'+h+'px"></span>'
            +   '<span class="wl">'+lab+'</span></div>';
     }).join('');
   }
