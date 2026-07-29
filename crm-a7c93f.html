@@ -241,6 +241,7 @@
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
     <span class="pill zero" id="fuPill">0 follow-ups due</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
+    <button class="crm-btn" id="signOut" title="Lock the CRM on this device">Sign out</button>
     <button class="crm-btn" id="refresh">Refresh</button>
     <a class="crm-btn primary" href="booking-console-a7c93f.html">Booking console →</a>
   </div>
@@ -469,11 +470,9 @@ window.__crmStart = function(){
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
   var GROUPS = [
-    { key:'pipeline',  label:'Pipeline',  stages:null },
+    { key:'pipeline',  label:'Pipeline',  stages:['New','Contacted','Quoted','Booked','Deposit paid','Invoice sent','On Hold','Completed','Lost'] },
     { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
-    { key:'completed', label:'Completed', stages:['Completed'] },
-    { key:'lost',      label:'Lost',      stages:['Lost'] },
-    { key:'archive',   label:'Archive',   stages:['Archive'] },
+    { key:'archive',   label:'Archive',   stages:['Archive','Completed','Lost'] },
     { key:'all',       label:'All',       stages:null }
   ];
   var TAB_KEY='acr_crm_tab';
@@ -579,6 +578,14 @@ window.__crmStart = function(){
       btn.classList.toggle('primary', !box.hidden);
       localStorage.setItem('acr_crm_dash', box.hidden?'0':'1');
       renderDash();
+    });
+  })();
+
+  (function(){
+    var b=$('signOut'); if(!b) return;
+    b.addEventListener('click', function(){
+      try { sessionStorage.removeItem('acr_bk_auth'); } catch(e){}
+      location.reload();
     });
   })();
 
