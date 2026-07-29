@@ -41,6 +41,12 @@
       background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body); font-size: 12px; cursor: pointer; }
     .dsel:focus { outline: none; border-color: var(--signal-500); }
     .dcard .empty { font-size: 12.5px; color: var(--text-muted); }
+    .bw .r { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+    .bw .r:last-child { border-bottom: 0; }
+    .bw .k { flex: 1; font-size: 12.5px; color: var(--text-muted); }
+    .bw .w { font-size: 13px; color: var(--text-secondary); }
+    .bw .v { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+    .bw .v.low { color: var(--text-secondary); }
     /* horizontal magnitude bars - one hue, direct labels, 4px rounded data-end */
     .bars .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin-bottom: 9px; }
     .bars .lab { font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -286,6 +292,7 @@
         </div>
         <div class="cols" id="chWeeks"></div>
       </div>
+      <div class="dcard"><h3>Best &amp; quietest</h3><div class="bw" id="chBest"></div></div>
     </div>
   </div>
 
@@ -496,6 +503,55 @@ window.__crmStart = function(){
     });
   })();
 
+  /* Best and quietest periods. Only periods from the first record onwards count,
+     otherwise "quietest" is always an empty month from before the CRM existed. */
+  function periodStats_(list, unit, now){
+    var dates = list.map(function(e){ return e.timestamp ? new Date(e.timestamp) : null; })
+                    .filter(function(d){ return d && !isNaN(d); });
+    if(dates.length < 2) return null;
+    var first = new Date(Math.min.apply(null, dates));
+    var keyOf, labelOf, step;
+    if(unit==='week'){
+      keyOf   = function(d){ return weekStart(d).getTime(); };
+      labelOf = function(t){ var d=new Date(t); return 'w/c '+d.getDate()+'/'+(d.getMonth()+1); };
+      step    = function(d){ var x=new Date(d); x.setDate(x.getDate()+7); return x; };
+      first   = weekStart(first);
+    } else {
+      keyOf   = function(d){ return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); };
+      labelOf = function(t){ return new Date(t).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}); };
+      step    = function(d){ return new Date(d.getFullYear(), d.getMonth()+1, 1); };
+      first   = new Date(first.getFullYear(), first.getMonth(), 1);
+    }
+    var counts={}, cur=new Date(first);
+    while(cur <= now){ counts[keyOf(cur)] = 0; cur = step(cur); }
+    dates.forEach(function(d){ var k=keyOf(d); if(k in counts) counts[k]++; });
+    var keys=Object.keys(counts);
+    if(keys.length < 2) return null;
+    var best=keys[0], worst=keys[0];
+    keys.forEach(function(k){
+      if(counts[k] > counts[best])   best  = k;
+      if(counts[k] <= counts[worst]) worst = k;
+    });
+    return { best:{label:labelOf(+best), n:counts[best]}, worst:{label:labelOf(+worst), n:counts[worst]}, periods:keys.length };
+  }
+  function renderBest_(live, now){
+    var el=$('chBest'); if(!el) return;
+    var wk=periodStats_(live,'week',now), mo=periodStats_(live,'month',now);
+    if(!wk && !mo){ el.innerHTML='<div class="empty">Not enough history yet.</div>'; return; }
+    var rows=[];
+    function add(k, st, which){
+      if(!st) return;
+      rows.push('<div class="r"><span class="k">'+k+'</span><span class="w">'+esc(st[which].label)+'</span>'
+              + '<span class="v'+(which==='worst'?' low':'')+'">'+st[which].n+'</span></div>');
+    }
+    add('Busiest week',  wk, 'best');
+    add('Quietest week', wk, 'worst');
+    add('Busiest month', mo, 'best');
+    add('Quietest month',mo, 'worst');
+    el.innerHTML = rows.join('')
+      + (mo && mo.periods<3 ? '<div class="empty" style="margin-top:10px">Based on '+mo.periods+' months of data.</div>' : '');
+  }
+
   function renderDash(){
     var box=$('dash'); if(!box || box.hidden) return;
     /* Archived records are historic clean-up, not performance. They stay out
@@ -550,6 +606,8 @@ window.__crmStart = function(){
            +   '<span class="bar'+(c[1]?'':' zero')+'" style="height:'+h+'px"></span>'
            +   '<span class="wl">'+lab+'</span></div>';
     }).join('');
+
+    renderBest_(live, now);
   }
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
