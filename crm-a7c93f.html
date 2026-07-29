@@ -330,14 +330,6 @@ window.__crmStart = function(){
 
   // seed status dropdown
   STAGES.forEach(function(s){ var o=document.createElement('option'); o.value=s.key; o.textContent=s.key; $('dStatus').appendChild(o); });
-  (function(){
-    var sel=$('dCategory'); if(!sel) return;
-    var auto=document.createElement('option'); auto.value=''; auto.textContent='Auto — from the enquiry';
-    sel.appendChild(auto);
-    CATS.map(function(c){ return c[0]; }).concat(['Other']).forEach(function(name){
-      var o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
-    });
-  })();
 
   function esc(t){ var d=document.createElement('div'); d.textContent=t==null?'':t; return d.innerHTML; }
   function statusOf(e){ var s=(e.status||'').toString().trim(); return STAGES.some(function(x){return x.key===s;}) ? s : 'New'; }
@@ -358,6 +350,18 @@ window.__crmStart = function(){
     ['Battery & recovery', /battery|recovery|jump ?start/i],
     ['Concierge',          /concierge|storage|detailing|chauffeur|sourcing/i]
   ];
+  /* Populate the drawer's category picker. Must run after CATS is assigned -
+     it previously sat higher up the file and threw on `CATS.map` before the
+     array existed, which killed the whole script and blanked the page. */
+  (function(){
+    var sel=$('dCategory'); if(!sel) return;
+    var auto=document.createElement('option'); auto.value=''; auto.textContent='Auto — from the enquiry';
+    sel.appendChild(auto);
+    CATS.map(function(c){ return c[0]; }).concat(['Other']).forEach(function(name){
+      var o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
+    });
+  })();
+
   function categoryOf(e){
     var set = (e.category||'').toString().trim();
     if(set) return set;                       /* chosen by hand in the drawer */
