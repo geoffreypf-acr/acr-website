@@ -24,6 +24,9 @@
 
   /* ---- Dashboard ---- */
     .dash { margin-bottom: 20px; }
+    .dash-opt { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12.5px;
+      color: var(--text-muted); cursor: pointer; user-select: none; }
+    .dash-opt input { width: 15px; height: 15px; accent-color: var(--signal-500); cursor: pointer; }
     .dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; }
     .tile { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px; }
     .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
@@ -246,6 +249,7 @@
   <div class="tabs" id="tabs"></div>
 
   <div class="dash" id="dash" hidden>
+    <label class="dash-opt"><input type="checkbox" id="dashArch"> Include archived</label>
     <div class="dash-tiles" id="dashTiles"></div>
     <div class="dash-charts">
       <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
@@ -401,9 +405,24 @@ window.__crmStart = function(){
            + '</div>';
     }).join('');
   }
+  (function(){
+    var cb=$('dashArch'); if(!cb) return;
+    cb.checked = localStorage.getItem('acr_crm_dash_arch')==='1';
+    cb.addEventListener('change', function(){
+      localStorage.setItem('acr_crm_dash_arch', cb.checked?'1':'0');
+      renderDash();
+    });
+  })();
+
   function renderDash(){
     var box=$('dash'); if(!box || box.hidden) return;
-    var live = data.filter(function(e){ return !isDeleted(e); });
+    /* Archived records are historic clean-up, not performance. They stay out
+       of every tile and chart unless the box is ticked. */
+    var withArch = localStorage.getItem('acr_crm_dash_arch')==='1';
+    var live = data.filter(function(e){
+      if(isDeleted(e)) return false;
+      return withArch || statusOf(e)!=='Archive';
+    });
     var open = live.filter(function(e){ return !isClosedOut(statusOf(e)); });
     var won  = live.filter(function(e){ return statusOf(e)==='Completed'; });
     var lost = live.filter(function(e){ return statusOf(e)==='Lost'; });
@@ -450,7 +469,7 @@ window.__crmStart = function(){
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
   var GROUPS = [
-    { key:'pipeline',  label:'Pipeline',  stages:['New','Contacted','Quoted','Booked','Deposit paid','Invoice sent'] },
+    { key:'pipeline',  label:'Pipeline',  stages:null },
     { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
     { key:'completed', label:'Completed', stages:['Completed'] },
     { key:'lost',      label:'Lost',      stages:['Lost'] },
@@ -491,9 +510,9 @@ window.__crmStart = function(){
      board opens on what still needs working. */
   (function(){
     if(localStorage.getItem(CLOSED_KEY)) return;
-    if(window.matchMedia && window.matchMedia('(max-width: 720px)').matches){
-      try { localStorage.setItem(CLOSED_KEY, JSON.stringify(['Completed','Lost','On Hold'])); } catch(e){}
-    }
+    /* Closed-out stages start collapsed on every device: still there to drag
+       a card onto, but not taking up the width of a working column. */
+    try { localStorage.setItem(CLOSED_KEY, JSON.stringify(['Completed','On Hold','Lost','Archive'])); } catch(e){}
   })();
 
   function render(){
