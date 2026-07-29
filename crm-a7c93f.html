@@ -72,7 +72,7 @@
   /* Drawer */
   .drawer-bg { position: fixed; inset: 0; background: rgba(6,15,22,.55); z-index: 80; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .drawer-bg.open { opacity: 1; pointer-events: auto; }
-  .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 420px; max-width: 92vw; background: var(--surface-1); border-left: 1px solid var(--border-default); z-index: 81; transform: translateX(100%); transition: transform .22s var(--ease-out, ease); display: flex; flex-direction: column; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100%; width: 440px; max-width: 100vw; background: var(--surface-1); border-left: 1px solid var(--border-default); z-index: 81; transform: translateX(100%); transition: transform .22s var(--ease-out, ease); display: flex; flex-direction: column; }
   .drawer.open { transform: none; }
   .drawer-h { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 16px; border-bottom: 1px solid var(--border-subtle); }
   .drawer-h .nm { font-family: var(--font-display); font-weight: 400; font-size: 22px; letter-spacing: .02em; }
@@ -169,10 +169,13 @@
     .dash-charts { grid-template-columns: 1fr; gap: 10px; }
     .cols { height: 100px; }
     /* drawer fills the screen */
-    .drawer { width: 100%; max-width: none; }
+    /* keep the drawer a fixed 440px; only go full-width when the screen is narrower than that */
     .dactions a { min-width: 0; font-size: 12.5px; }
     .dtpl .tpl-name { flex: 1 1 100%; }
     .dtpl a, .dtpl button { min-width: 0; font-size: 12px; padding: 0 8px; }
+  }
+  @media (max-width: 470px) {
+    .drawer { width: 100%; }
   }
   @media (max-width: 400px) {
     .dash-tiles { grid-template-columns: 1fr 1fr; }
@@ -300,7 +303,8 @@ window.__crmStart = function(){
     { key:'Invoice sent', color:'#C98A5E' },
     { key:'Completed',    color:'#1F8A5B' },
     { key:'On Hold',      color:'#9B8CC4' },
-    { key:'Lost',         color:'#E0695B' }
+    { key:'Lost',         color:'#E0695B' },
+    { key:'Archive',      color:'#5C6B78' }
   ];
   var $ = function(id){ return document.getElementById(id); };
   var data = [];          // all enquiries
@@ -315,7 +319,8 @@ window.__crmStart = function(){
   function valNum(e){ var v=parseFloat(String(e.value||'').replace(/[^0-9.]/g,'')); return isNaN(v)?0:v; }
   function today(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
   function fuDate(e){ if(!e.followup) return null; var d=new Date(e.followup); return isNaN(d)?null:d; }
-  function isOverdue(e){ var d=fuDate(e); if(!d) return false; var st=statusOf(e); if(st==='Completed'||st==='Lost') return false; return d<=today(); }
+  function isClosedOut(st){ return st==='Completed' || st==='Lost' || st==='Archive'; }
+  function isOverdue(e){ var d=fuDate(e); if(!d) return false; if(isClosedOut(statusOf(e))) return false; return d<=today(); }
   function vehicle(e){ return [e.make,e.model].filter(Boolean).join(' '); }
   /* Turn raw service/source text into something readable on a card. */
   var CATS = [
@@ -377,7 +382,7 @@ window.__crmStart = function(){
   function renderDash(){
     var box=$('dash'); if(!box || box.hidden) return;
     var live = data.filter(function(e){ return !isDeleted(e); });
-    var open = live.filter(function(e){ var st=statusOf(e); return st!=='Completed' && st!=='Lost'; });
+    var open = live.filter(function(e){ return !isClosedOut(statusOf(e)); });
     var won  = live.filter(function(e){ return statusOf(e)==='Completed'; });
     var lost = live.filter(function(e){ return statusOf(e)==='Lost'; });
     var now=new Date(), wk0=weekStart(now), prev=new Date(wk0); prev.setDate(prev.getDate()-7);
@@ -427,6 +432,7 @@ window.__crmStart = function(){
     { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
     { key:'completed', label:'Completed', stages:['Completed'] },
     { key:'lost',      label:'Lost',      stages:['Lost'] },
+    { key:'archive',   label:'Archive',   stages:['Archive'] },
     { key:'all',       label:'All',       stages:null }
   ];
   var TAB_KEY='acr_crm_tab';
