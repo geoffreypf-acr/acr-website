@@ -400,6 +400,15 @@ window.__crmStart = function(){
     var g = nat.length===10 ? nat.slice(0,4)+' '+nat.slice(4) : nat;
     return '+44 '+g;
   }
+  /* When it came in, e.g. "29 Jul, 15:10". Missed calls are only useful if you
+     can see the time without opening the card. */
+  function whenOf(e){
+    if(!e.timestamp) return '';
+    var d=new Date(e.timestamp);
+    if(isNaN(d)) return '';
+    return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+         + ', ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
   function money(n){ return '£'+n.toLocaleString('en-GB'); }
   function fmtD(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
 
@@ -565,7 +574,9 @@ window.__crmStart = function(){
         if(ch && ch.toLowerCase()!==pcv.toLowerCase()) chips.push('<span class="chip">'+esc(ch)+'</span>');
         if(pcv) chips.push('<span class="chip pref">'+esc(pcv)+'</span>');
         card.innerHTML='<div class="nm">'+esc(e.name||'—')+'</div>'
-          +'<div class="meta">'+esc([serviceOf(e),vehicle(e)].filter(Boolean).join(' · ')||'—')+'</div>'
+          +'<div class="meta">'+esc((/missed call/i.test(categoryOf(e))
+              ? [serviceOf(e), whenOf(e)]
+              : [serviceOf(e), vehicle(e)]).filter(Boolean).join(' · ')||'—')+'</div>'
           +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'');
         card.addEventListener('click', function(){ openDrawer(e); });
         card.addEventListener('dragstart', function(ev){ dragKey=e.timestamp; ev.dataTransfer.effectAllowed='move'; });
