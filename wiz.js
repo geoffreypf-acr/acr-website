@@ -76,19 +76,33 @@
 
     // Delivery toggle
     function via() { var r = form.querySelector('[data-via]:checked'); return r ? r.value : 'whatsapp'; }
+
+    /* A dash cam quote turns on the camera, coverage and battery choices, which
+       this wizard doesn't ask for. So when someone ticks Dash Camera we log the
+       lead here and hand them straight to the configurator with their details
+       already filled in, instead of making them type it all again. */
+    var DASHCAM = /dash ?cam/i;
+    function interests() {
+      return Array.prototype.slice.call(form.querySelectorAll('input[data-interest]:checked'))
+                  .map(function (c) { return c.value; });
+    }
+    function toDashCam() { return interests().some(function (v) { return DASHCAM.test(v); }); }
+
     var labelEl = subBtn.querySelector('[data-submit-label]');
     var icWa = subBtn.querySelector('[data-ic-wa]');
     var icMail = subBtn.querySelector('[data-ic-mail]');
     function syncBtn() {
-      var wa = via() === 'whatsapp';
-      if (labelEl) labelEl.textContent = wa ? 'Send on WhatsApp' : 'Send by email';
-      if (icWa) icWa.style.display = wa ? '' : 'none';
-      if (icMail) icMail.style.display = wa ? 'none' : '';
-      subBtn.classList.toggle('btn-wa', wa);
-      subBtn.classList.toggle('btn-silver', !wa);
+      var dash = toDashCam(), wa = via() === 'whatsapp';
+      if (labelEl) labelEl.textContent = dash ? 'Continue to dash cam options'
+                                              : (wa ? 'Send on WhatsApp' : 'Send by email');
+      if (icWa) icWa.style.display = (!dash && wa) ? '' : 'none';
+      if (icMail) icMail.style.display = (!dash && !wa) ? '' : 'none';
+      subBtn.classList.toggle('btn-wa', !dash && wa);
+      subBtn.classList.toggle('btn-silver', dash || !wa);
       if (window.lucide) lucide.createIcons();
     }
     form.querySelectorAll('[data-via]').forEach(function (r) { r.addEventListener('change', syncBtn); });
+    form.querySelectorAll('input[data-interest]').forEach(function (c) { c.addEventListener('change', syncBtn); });
     syncBtn();
 
     function clearErr() { var e = form.querySelector('.wiz-err'); if (e) e.remove(); }
@@ -170,17 +184,34 @@
     }
 
     subBtn.addEventListener('click', function () {
-      var interest = Array.prototype.slice.call(form.querySelectorAll('input[data-interest]:checked')).map(function (c) { return c.value; });
+      var interest = interests();
       if (form.querySelector('input[data-interest]') && !interest.length) { showErr('Please choose at least one service you’re interested in.'); return; }
       var d = { Name: get('name'), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Year: get('year'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
       d['Interested in'] = interest.join(', ') || '—';
       d['Preferred reply'] = via() === 'whatsapp' ? 'WhatsApp' : 'Email';
-      var order = ['Name', 'Mobile', 'Email', 'Postcode', 'Make', 'Model', 'Trim', 'Fuel', 'Registration', 'Interested in', 'Preferred reply'];
+      /* Year was missing here, so the WhatsApp message left it out even though the
+         form makes it mandatory and both the CRM and the email copy record it. */
+      var order = ['Name', 'Mobile', 'Email', 'Postcode', 'Make', 'Model', 'Year', 'Trim', 'Fuel', 'Registration', 'Interested in', 'Preferred reply'];
       var lines = [];
       order.forEach(function (k) { if (d[k] && d[k] !== '—' || k === 'Interested in' || k === 'Preferred reply') lines.push(k + ': ' + d[k]); });
       var text = 'New enquiry from acrautomobile.com' + NL + NL + lines.join(NL);
       emailBackup(d);
       sheetBackup(d);
+
+      /* Dash cam: hand over to the configurator, details prefilled. The lead is
+         already logged and emailed above, so nothing is lost if they stop there.
+         Anything else they ticked travels with them and is included in the
+         message they send from the dash cam page. */
+      if (toDashCam()) {
+        var q = { name: d.Name, contact: d.Mobile || d.Email, make: d.Make, model: d.Model, year: d.Year, via: via() };
+        var also = interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ');
+        if (also) q.also = also;
+        var hp = new URLSearchParams();
+        Object.keys(q).forEach(function (k) { if (q[k] && q[k] !== '—') hp.set(k, q[k]); });
+        location.href = '/dash-camera-installation-london#' + hp.toString();
+        return;
+      }
+
       if (via() === 'whatsapp') window.open('https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
       var okMsg = ok && ok.querySelector('[data-ok-msg]');
       if (okMsg) okMsg.textContent = via() === 'whatsapp'

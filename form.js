@@ -49,7 +49,7 @@
       year: F('Year'),
       location: F('Location'),
       urgency: F('Urgency'),
-      details: F('Details', 'Message', 'Subject')
+      details: F('Details', 'Message', 'Subject', 'Also interested in')
     };
     /* text/plain avoids a CORS preflight so Apps Script accepts it */
     try {
@@ -397,8 +397,39 @@
     var ok  = document.getElementById('dashOk');
     var dmk = document.getElementById('dmk');
     var dmd = document.getElementById('dmd');
+    var dy  = document.getElementById('dy');
     var dn  = document.getElementById('dn');
     var dt  = document.getElementById('dt');
+
+    /* Arriving from the homepage wizard: it has already taken their details and
+       logged the lead, and passes them here in the URL hash (never the query
+       string, so nothing extra can be crawled or indexed). All they have left to
+       do is pick the camera and coverage. */
+    var alsoWanted = '';
+    (function prefill() {
+      var raw = (location.hash || '').replace(/^#/, '');
+      if (!raw || raw.indexOf('=') === -1) return;
+      var q;
+      try { q = new URLSearchParams(raw); } catch (e) { return; }
+      var set = function (el, v) { if (el && v && !el.value) el.value = v; };
+      set(dmk, q.get('make')); set(dmd, q.get('model')); set(dy, q.get('year'));
+      set(dn, q.get('name'));  set(dt, q.get('contact'));
+      alsoWanted = q.get('also') || '';
+      var viaWanted = q.get('via');
+      if (viaWanted) {
+        var r = form.querySelector('input[name="dvia"][value="' + viaWanted + '"]');
+        if (r) r.checked = true;
+      }
+      if (!q.get('make') && !q.get('name')) return;
+      var note = document.createElement('div');
+      note.className = 'cfg-prefill';
+      note.style.cssText = 'margin:0 0 18px;padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.5;'
+        + 'background:var(--secure-soft,rgba(47,161,204,.08));border:1px solid rgba(47,161,204,.3);color:var(--text-secondary)';
+      note.textContent = 'Your details have carried over — just pick your camera and coverage below, then send.'
+        + (alsoWanted ? ' We’ll cover ' + alsoWanted + ' in the same reply.' : '');
+      form.parentNode.insertBefore(note, form);
+      if (form.scrollIntoView) { try { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
+    })();
 
     function dfill(list, items) {
       if (!list) return;
@@ -430,7 +461,8 @@
       sum('live', (liveCb && liveCb.checked) ? 'Yes' : (isU ? 'No' : 'U3000 PRO only'));
       sum('price', camEl ? ('\u00a3' + camEl.getAttribute('data-base')) : '\u00a3159.99');
       var mk = (dmk && dmk.value || '').trim(), md = (dmd && dmd.value || '').trim();
-      sum('veh', (mk || md) ? (mk + ' ' + md).trim() : '\u2014');
+      var yr = (dy && dy.value || '').trim();
+      sum('veh', (mk || md || yr) ? [mk, md, yr].filter(Boolean).join(' ') : '\u2014');
     }
     form.addEventListener('change', refresh);
     form.addEventListener('input', refresh);
@@ -469,17 +501,24 @@
       var cam = get('cam'), cov = get('cov');
       var contact = (dt && dt.value || '').trim();
       var mk = (dmk && dmk.value || '').trim();
+      var yr = (dy && dy.value || '').trim();
       if (!cam) { derr('Please choose a camera \u2014 Q200 or U3000 PRO.'); return; }
       if (!cov) { derr('Please choose front, or front & rear.'); return; }
       if (!mk) { derr('Please tell us the vehicle make the camera is for.', dmk); return; }
+      /* The year decides the wiring and where the camera can be hidden, so it is
+         asked for here as well as in the wizard. */
+      if (!yr) { derr('Please add the vehicle year.', dy); return; }
+      if (!/^(19|20)\d{2}$/.test(yr)) { derr('Please enter a valid 4-digit year, e.g. 2021.', dy); return; }
       if (!contact) { derr('Please add a mobile or email so we can reply.', dt); return; }
       var live = (liveCb && !liveCb.disabled && liveCb.checked) ? 'Yes' : 'No';
-      var veh = (mk + ' ' + (dmd && dmd.value || '')).trim();
       var fields = {
         Camera: cam, Coverage: cov, 'External battery': get('bat') || 'None',
-        'Live remote view': live, Vehicle: veh,
+        'Live remote view': live,
+        Make: mk, Model: (dmd && dmd.value || '').trim() || '\u2014', Year: yr,
         Name: (dn && dn.value || '').trim() || '\u2014', Contact: contact
       };
+      /* Anything else they ticked on the homepage wizard before being sent here. */
+      if (alsoWanted) fields['Also interested in'] = alsoWanted;
       var lines = [];
       for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
       var text = 'New dash cam enquiry from acrautomobile.com\n\n' + lines.join('\n');
