@@ -263,7 +263,7 @@
     <span class="pill zero" id="fuPill">0 follow-ups due</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="signOut" title="Lock the CRM on this device">Sign out</button>
-    <button class="crm-btn" id="forcePull" title="Pull new emails and missed calls from Gmail now">Force pull</button>
+    <button class="crm-btn" id="forcePull" title="Pull new emails and calls from Gmail now">Force pull</button>
     <button class="crm-btn" id="refresh">Refresh</button>
     <a class="crm-btn primary" href="booking-console-a7c93f.html">Booking console →</a>
   </div>
@@ -379,7 +379,7 @@ window.__crmStart = function(){
   function vehicle(e){ return [e.make,e.model].filter(Boolean).join(' '); }
   /* Turn raw service/source text into something readable on a card. */
   var CATS = [
-    ['Missed call',        /missed call/i],
+    ['Calls',              /missed call/i],
     ['Trade & dealership', /dealership|trade rate|referral/i],
     ['Vehicle security',   /tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security assessment|security/i],
     ['CarPlay & Android',  /carplay|car ?play|android auto/i],
@@ -400,8 +400,14 @@ window.__crmStart = function(){
     });
   })();
 
+  /* A phone lead. The sheet still stores the service as "Missed call" - that is
+     what the Gmail sync writes and what older rows contain - but the board only
+     ever shows it as a call. */
+  function isCall(e){ return /missed call/i.test(serviceOf(e)) || /missed call/i.test((e.category||'').toString()); }
+  /* Rows categorised by hand before the category was renamed. */
+  function categoryLegacy_(v){ return /^missed call$/i.test(v) ? 'Calls' : v; }
   function categoryOf(e){
-    var set = (e.category||'').toString().trim();
+    var set = categoryLegacy_((e.category||'').toString().trim());
     if(set) return set;                       /* chosen by hand in the drawer */
     var hay = [serviceOf(e), e.source||'', e.details||''].join(' ');
     for(var i=0;i<CATS.length;i++){ if(CATS[i][1].test(hay)) return CATS[i][0]; }
@@ -416,6 +422,11 @@ window.__crmStart = function(){
     return '';
   }
   function serviceOf(e){ return e.service||e.interested||e.interestedIn||''; }
+  /* What the card shows. "Missed call" is how it arrives; on the board it is
+     simply a call - the time next to it already says it went unanswered. */
+  function serviceLabel(e){ var s=serviceOf(e); return /missed call/i.test(s) ? 'Call' : s; }
+  /* Unnamed callers are stored as "Missed call 07…" by the Gmail sync. */
+  function nameOf(e){ return (e.name||'').toString().replace(/^missed call\b/i,'Call'); }
   function prefContact(e){ return (e.preferredReply||e.preferredreply||e.preferred||'').toString().trim(); }
   function isDeleted(e){ var v=(e.deleted||'').toString().toLowerCase(); return v==='true'||v==='1'||v==='yes'; }
   function fnum(e){ var n=parseInt(e.followups,10); return (n>=1&&n<=3)?n:0; }
@@ -728,10 +739,10 @@ window.__crmStart = function(){
            was showing "Phone" as both the channel and the preferred reply */
         if(ch && ch.toLowerCase()!==pcv.toLowerCase()) chips.push('<span class="chip">'+esc(ch)+'</span>');
         if(pcv) chips.push('<span class="chip pref">'+esc(pcv)+'</span>');
-        card.innerHTML='<div class="nm">'+esc(e.name||'—')+'</div>'
-          +'<div class="meta">'+esc((/missed call/i.test(categoryOf(e))
-              ? [serviceOf(e), whenOf(e)]
-              : [serviceOf(e), vehicle(e)]).filter(Boolean).join(' · ')||'—')+'</div>'
+        card.innerHTML='<div class="nm">'+esc(nameOf(e)||'—')+'</div>'
+          +'<div class="meta">'+esc((isCall(e)
+              ? [serviceLabel(e), whenOf(e)]
+              : [serviceLabel(e), vehicle(e)]).filter(Boolean).join(' · ')||'—')+'</div>'
           +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'');
         card.addEventListener('click', function(){ openDrawer(e); });
         card.addEventListener('dragstart', function(ev){ dragKey=e.timestamp; ev.dataTransfer.effectAllowed='move'; });
@@ -790,8 +801,8 @@ window.__crmStart = function(){
   // Drawer
   function openDrawer(e){
     current=e;
-    $('dName').textContent = e.name||'—';
-    $('dSub').textContent = [serviceOf(e), vehicle(e)].filter(Boolean).join(' · ');
+    $('dName').textContent = nameOf(e)||'—';
+    $('dSub').textContent = [serviceLabel(e), vehicle(e)].filter(Boolean).join(' · ');
     var info=[];
     if(e.email) info.push('<b>Email:</b> <a href="mailto:'+esc(e.email)+'">'+esc(e.email)+'</a>');
     if(e.mobile) info.push('<b>Mobile:</b> '+esc(ukPhone(e.mobile)));
@@ -814,17 +825,20 @@ window.__crmStart = function(){
     /* ---- Quick message templates (follow-up / closing) ---- */
     (function(){
       var box = $('dTemplates');
-      var first = (e.name||'').toString().trim().split(/\s+/)[0] || '';
+      /* Placeholder names ("Call 07…") must not become "Hi Call," in a message. */
+      var nm = nameOf(e).trim();
+      var first = /^call\b/i.test(nm) ? '' : (nm.split(/\s+/)[0] || '');
+      if(/\d/.test(first)) first = '';
       var hi = first ? 'Hello ' + first + ',' : 'Hello,';
       var TPL = [
-        { id:'missed', label:'Missed call', subject:'Sorry we missed your call — ACR Automobile',
+        { id:'missed', label:'Call reply', subject:'Sorry we missed your call — ACR Automobile',
           body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?\n\nKind regards,\nACR Automobile' },
         { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
           body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.\n\nKind regards,\nACR Automobile' },
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
           body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
       ];
-      if (/missed call/i.test(serviceOf(e)) || statusOf(e)==='Call back') {
+      if (isCall(e) || statusOf(e)==='Call back') {
         TPL.sort(function(a,b){ return (a.id==='missed'?-1:0) - (b.id==='missed'?-1:0); });
       } else {
         TPL.sort(function(a,b){ return (a.id==='missed'?1:0) - (b.id==='missed'?1:0); });
@@ -853,14 +867,14 @@ window.__crmStart = function(){
       });
     })();
     $('dStatus').value = statusOf(e);
-    $('dCategory').value = (e.category||'').toString().trim();
+    $('dCategory').value = categoryLegacy_((e.category||'').toString().trim());
     $('dValue').value = e.value||'';
     $('dFollowup').value = e.followup ? String(e.followup).slice(0,10) : '';
     $('dOwner').value = e.owner||'';
     $('dNotes').value = e.notes||'';
     setFnumUI(fnum(e));
     // Book link → prefill booking console
-    var p = new URLSearchParams({ name:e.name||'', email:e.email||'', phone:e.mobile||'', make:e.make||'', model:e.model||'', service:serviceOf(e) });
+    var p = new URLSearchParams({ name:nameOf(e), email:e.email||'', phone:e.mobile||'', make:e.make||'', model:e.model||'', service:serviceLabel(e) });
     $('dBook').href = 'booking-console-a7c93f.html#'+p.toString();
     $('drawer').classList.add('open'); $('drawerBg').classList.add('open');
   }
