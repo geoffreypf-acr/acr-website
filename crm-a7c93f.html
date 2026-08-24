@@ -540,12 +540,18 @@ window.__crmStart = function(){
     dates.forEach(function(d){ var k=keyOf(d); if(k in counts) counts[k]++; });
     var keys=Object.keys(counts);
     if(!keys.length) return null;
-    var best=keys[0], worst=keys[0];
-    keys.forEach(function(k){
-      if(counts[k] > counts[best])   best  = k;
-      if(counts[k] <= counts[worst]) worst = k;
-    });
-    return { best:{label:labelOf(+best), n:counts[best]}, worst:{label:labelOf(+worst), n:counts[worst]}, periods:keys.length };
+    /* The current week/month is still running, so it nearly always holds the
+       lowest count - on a Monday morning it is zero. Naming it the quietest
+       period is wrong, so only finished periods compete for that. The busiest
+       can still be the one in progress: that is real news. */
+    var curKey = String(keyOf(now));
+    var done = keys.filter(function(k){ return k !== curKey; });
+    var best = keys[0], worst = done.length ? done[0] : null;
+    keys.forEach(function(k){ if(counts[k] > counts[best]) best = k; });
+    done.forEach(function(k){ if(counts[k] <= counts[worst]) worst = k; });
+    return { best:{label:labelOf(+best), n:counts[best]},
+             worst: worst===null ? null : {label:labelOf(+worst), n:counts[worst]},
+             periods: done.length };
   }
   /* Which category led in each month - the seasonal picture. Security tends to
      spike after local theft, CarPlay around plate changes, and this is where
@@ -584,7 +590,7 @@ window.__crmStart = function(){
     if(!wk && !mo){ el.innerHTML='<div class="empty">Not enough history yet.</div>'; return; }
     var rows=[];
     function add(k, st, which){
-      if(!st) return;
+      if(!st || !st[which]) return;
       rows.push('<div class="r"><span class="k">'+k+'</span><span class="w">'+esc(st[which].label)+'</span>'
               + '<span class="v'+(which==='worst'?' low':'')+'">'+st[which].n+'</span></div>');
     }
@@ -593,7 +599,10 @@ window.__crmStart = function(){
     add('Busiest month', mo, 'best');
     if(mo && mo.periods>1) add('Quietest month', mo, 'worst');
     el.innerHTML = rows.join('')
-      + (mo && mo.periods<3 ? '<div class="empty" style="margin-top:10px">Based on '+mo.periods+' months of data.</div>' : '');
+      + (mo && mo.periods>=1 && mo.periods<3
+          ? '<div class="empty" style="margin-top:10px">Based on '+mo.periods
+            +' completed month'+(mo.periods===1?'':'s')+', plus this one so far.</div>'
+          : '');
   }
 
   function renderDash(){
@@ -617,9 +626,14 @@ window.__crmStart = function(){
     var decided = won.length+lost.length;
     var conv = decided? Math.round(won.length/decided*100) : null;
     var due = live.filter(function(e){ return isOverdue(e); }).length;
-    var delta = thisWk-lastWk;
+    /* Compare this week against the SAME point last week, not the whole of it.
+       On a Monday morning a part-week against a full one reported "-31 vs last
+       week", which looks like the phone has stopped ringing when it hasn't. */
+    var sameLast = new Date(prev.getTime() + (now.getTime()-wk0.getTime()));
+    var lastWkSoFar = live.filter(function(e){ var d=ts(e); return d && d>=prev && d<sameLast; }).length;
+    var delta = thisWk-lastWkSoFar;
     var tiles=[
-      ['New this week', thisWk, (lastWk||delta) ? (delta>0?'+':'')+delta+' vs last week' : 'first week of data'],
+      ['New this week', thisWk, (lastWk||delta) ? (delta>0?'+':'')+delta+' vs same point last week' : 'first week of data'],
       ['Open enquiries', open.length, live.length+' total on record'],
       ['Pipeline value', pipe?money(pipe):'—', pipe? open.filter(function(e){return valNum(e)>0;}).length+' with a value set' : 'no values entered yet'],
       ['Won', won.length, wonV?money(wonV)+' recorded':'no values entered yet'],
