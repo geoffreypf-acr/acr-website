@@ -180,20 +180,32 @@
     var labelEl = btn.querySelector('[data-submit-label]');
     var icWa = btn.querySelector('[data-ic-wa]');
     var icMail = btn.querySelector('[data-ic-mail]');
+    /* Same dash cam handoff as the homepage wizard: this form has no camera or
+       coverage questions, so ticking Dash Camera continues to the configurator
+       with everything prefilled instead of ending the enquiry here. */
+    var DASHCAM = /dash ?cam/i;
+    function toDashCam() {
+      return Array.prototype.slice.call(form.querySelectorAll('input[name="interest"]:checked'))
+                  .some(function (c) { return DASHCAM.test(c.value); });
+    }
     function syncBtn() {
       var via = selectedVia();
       var wa = via === 'whatsapp';
+      var dash = toDashCam();
       var waTxt = btn.getAttribute('data-wa-label') || 'Send on WhatsApp';
       var emTxt = btn.getAttribute('data-email-label') || 'Send by email';
-      if (labelEl) labelEl.textContent = wa ? waTxt : emTxt;
-      if (icWa) icWa.style.display = wa ? '' : 'none';
-      if (icMail) icMail.style.display = wa ? 'none' : '';
-      btn.classList.toggle('btn-wa', wa);
-      btn.classList.toggle('btn-silver', !wa);
+      if (labelEl) labelEl.textContent = dash ? 'Continue to dash cam options' : (wa ? waTxt : emTxt);
+      if (icWa) icWa.style.display = (!dash && wa) ? '' : 'none';
+      if (icMail) icMail.style.display = (!dash && !wa) ? '' : 'none';
+      btn.classList.toggle('btn-wa', !dash && wa);
+      btn.classList.toggle('btn-silver', dash || !wa);
       if (window.lucide) lucide.createIcons();
     }
     form.querySelectorAll('input[name="via"]').forEach(function (r) {
       r.addEventListener('change', syncBtn);
+    });
+    form.querySelectorAll('input[name="interest"]').forEach(function (c) {
+      c.addEventListener('change', syncBtn);
     });
     syncBtn();
 
@@ -381,6 +393,25 @@
       var ebEl = form.querySelector('.eyebrow');
       var svcLabel = fields['Interested in'] || (ebEl && ebEl.textContent.trim()) || 'Vehicle Security Assessment';
       crmUpload(fields, svcLabel); // → CRM (Google Sheet)
+
+      /* Dash cam: hand over with the details prefilled. The lead is logged above
+         and emailed here first, so nothing is lost if they stop on that page. */
+      if (toDashCam()) {
+        emailBackup(fields, pageRef);
+        var ttl = titleEl ? (titleEl.value || '').trim() : '';
+        var bare = fields['Name'] || '';
+        if (ttl && bare.indexOf(ttl + ' ') === 0) bare = bare.slice(ttl.length + 1);
+        var hq = new URLSearchParams();
+        var carry = {
+          name: bare, title: ttl, contact: fields['Mobile'] || fields['Email'],
+          make: fields['Make'], model: fields['Model'], year: fields['Year'], via: via,
+          also: interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ')
+        };
+        Object.keys(carry).forEach(function (k) { if (carry[k] && carry[k] !== '—') hq.set(k, carry[k]); });
+        location.href = '/dash-camera-installation-london#' + hq.toString();
+        return;
+      }
+
       if (via === 'whatsapp') {
         deliver(text);               // opens WhatsApp prefilled (keeps the user gesture)
         emailBackup(fields, pageRef); // + silent email copy to ACR
