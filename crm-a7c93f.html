@@ -855,10 +855,17 @@ window.__crmStart = function(){
     /* ---- Quick message templates (follow-up / closing) ---- */
     (function(){
       var box = $('dTemplates');
-      /* Placeholder names ("Call 07…") must not become "Hi Call," in a message. */
+      /* How to address them. The forms now collect an optional title, so names
+         arrive as "Mr Alex Marin" - taking the first word blindly would open a
+         message with "Hello Mr,". With a title we use title + surname, which is
+         the right register for a quote anyway; without one, the first name.
+         Placeholder names ("Call 07…") get no greeting at all. */
+      var TITLE_RE = /^(mr|mrs|ms|miss|mx|dr|prof|professor|rev|sir|lady|lord)\.?$/i;
       var nm = nameOf(e).trim();
-      var first = /^call\b/i.test(nm) ? '' : (nm.split(/\s+/)[0] || '');
-      if(/\d/.test(first)) first = '';
+      var bits = nm.split(/\s+/).filter(Boolean);
+      var ttl = (bits.length && TITLE_RE.test(bits[0])) ? bits.shift() : '';
+      var first = ttl && bits.length ? ttl + ' ' + bits[bits.length - 1] : (bits[0] || '');
+      if(/^call\b/i.test(nm) || /\d/.test(first)) first = '';
       var hi = first ? 'Hello ' + first + ',' : 'Hello,';
       var TPL = [
         { id:'missed', label:'Call reply', subject:'Sorry we missed your call — ACR Automobile',

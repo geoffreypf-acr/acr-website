@@ -351,6 +351,11 @@ a.hero-rating:hover { border-color: var(--signal-500); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
 .field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .field.full { grid-column: 1 / -1; }
+/* Title + name on one line. The select is fixed-width so the name keeps the room
+   it had; both inherit the .field input/select styling above, so heights match. */
+.name-row { display: flex; gap: 8px; align-items: stretch; }
+.name-row select { flex: 0 0 96px; width: 96px; min-width: 0; }
+.name-row input { flex: 1 1 auto; min-width: 0; }
 .field label { font-size: 12.5px; font-weight: 600; letter-spacing: .03em; color: var(--text-secondary); }
 .field input, .field select { height: 50px; padding: 0 15px; width: 100%; min-width: 0; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s; }
 .field input:focus, .field select:focus { border-color: var(--signal-500); box-shadow: 0 0 0 3px var(--accent-soft); }

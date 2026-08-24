@@ -153,6 +153,10 @@
     showStep(1);
 
     function get(f) { var el = form.querySelector('[data-field="' + f + '"]'); return el ? (el.value || '').trim() : ''; }
+    /* Title (Mr / Mrs / Ms / Miss …) travels with the name, so the CRM's name
+       column and the WhatsApp message both read "Mr Alex Marin". Optional. */
+    function titleVal() { var t = form.querySelector('[data-title]'); return t ? (t.value || '').trim() : ''; }
+    function fullName() { var v = titleVal(), n = get('name'); return (v && n) ? v + ' ' + n : n; }
 
     function emailBackup(d) {
       try {
@@ -186,7 +190,7 @@
     subBtn.addEventListener('click', function () {
       var interest = interests();
       if (form.querySelector('input[data-interest]') && !interest.length) { showErr('Please choose at least one service you’re interested in.'); return; }
-      var d = { Name: get('name'), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Year: get('year'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
+      var d = { Name: fullName(), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Year: get('year'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
       d['Interested in'] = interest.join(', ') || '—';
       d['Preferred reply'] = via() === 'whatsapp' ? 'WhatsApp' : 'Email';
       /* Year was missing here, so the WhatsApp message left it out even though the
@@ -203,7 +207,9 @@
          Anything else they ticked travels with them and is included in the
          message they send from the dash cam page. */
       if (toDashCam()) {
-        var q = { name: d.Name, contact: d.Mobile || d.Email, make: d.Make, model: d.Model, year: d.Year, via: via() };
+        /* name and title travel apart, so the dash cam form can prefill its own
+           title picker instead of ending up with "Mr Mr Alex Marin". */
+        var q = { name: get('name'), title: titleVal(), contact: d.Mobile || d.Email, make: d.Make, model: d.Model, year: d.Year, via: via() };
         var also = interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ');
         if (also) q.also = also;
         var hp = new URLSearchParams();

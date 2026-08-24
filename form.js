@@ -60,6 +60,18 @@
       }).catch(function () {});
     } catch (e) {}
   }
+  /* Title — Mr / Mrs / Ms / Miss / Mx / Dr / Prof.
+     Kept together with the name rather than sent as a line of its own, so the
+     CRM's name column and the WhatsApp message both read "Mr Alex Marin" and no
+     sheet column had to be added. Optional everywhere: plenty of people would
+     rather not say, and it is never worth losing an enquiry over. */
+  function withTitle(form, name) {
+    var t = form && form.querySelector('[data-title]');
+    var v = t ? (t.value || '').trim() : '';
+    name = (name || '').trim();
+    return (v && name && name !== '—') ? v + ' ' + name : name;
+  }
+
   // Friendly labels for known field ids (falls back to the <label> text)
   var LABELS = {
     n: 'Name', e: 'Email', t: 'Mobile', pc: 'Postcode', v: 'Vehicle',
@@ -319,12 +331,15 @@
       var controls = form.querySelectorAll('input, select, textarea');
       var lines = [], fields = {}, filledCount = 0, hasContact = false, firstEmpty = null;
 
+      var titleEl = form.querySelector('[data-title]');
       controls.forEach(function (el) {
         if (el.name === 'via' || el.type === 'checkbox' || el.type === 'hidden') return; // toggle / honeypot
+        if (el === titleEl) return;                    // merged into the name below
         var val = (el.value || '').trim();
         if (!val) { if (!firstEmpty) firstEmpty = el; return; }
         filledCount++;
         var label = labelFor(el);
+        if (/^(name|full name|your name|contact name)$/i.test(label)) val = withTitle(form, val);
         if (el.type === 'email' || el.type === 'tel' || /mail|mobile|phone/i.test(label)) {
           hasContact = true;
         }
@@ -414,6 +429,8 @@
       var set = function (el, v) { if (el && v && !el.value) el.value = v; };
       set(dmk, q.get('make')); set(dmd, q.get('model')); set(dy, q.get('year'));
       set(dn, q.get('name'));  set(dt, q.get('contact'));
+      var tEl = form.querySelector('[data-title]');
+      if (tEl && q.get('title') && !tEl.value) tEl.value = q.get('title');
       alsoWanted = q.get('also') || '';
       var viaWanted = q.get('via');
       if (viaWanted) {
@@ -515,7 +532,7 @@
         Camera: cam, Coverage: cov, 'External battery': get('bat') || 'None',
         'Live remote view': live,
         Make: mk, Model: (dmd && dmd.value || '').trim() || '\u2014', Year: yr,
-        Name: (dn && dn.value || '').trim() || '\u2014', Contact: contact
+        Name: withTitle(form, (dn && dn.value || '').trim()) || '\u2014', Contact: contact
       };
       /* Anything else they ticked on the homepage wizard before being sent here. */
       if (alsoWanted) fields['Also interested in'] = alsoWanted;
@@ -566,7 +583,7 @@
     btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       var pe = document.getElementById('cErr'); if (pe) pe.remove();
-      var name = V('cc-name'), tel = V('cc-tel'), email = V('cc-email');
+      var name = withTitle(form, V('cc-name')), tel = V('cc-tel'), email = V('cc-email');
       var svcs = Array.prototype.slice.call(form.querySelectorAll('input[name="cservice"]:checked')).map(function (c) { return c.value; });
       if (!name) { cerr('Please add your name.', document.getElementById('cc-name')); return; }
       if (!tel && !email) { cerr('Please add a mobile or email so we can reply.', document.getElementById('cc-tel')); return; }
@@ -611,7 +628,7 @@
     btn.addEventListener('click', function(ev){
       ev.preventDefault();
       var pe=document.getElementById('batErr'); if(pe)pe.remove();
-      var name=V('bt-name'), tel=V('bt-tel'), email=V('bt-email');
+      var name=withTitle(form, V('bt-name')), tel=V('bt-tel'), email=V('bt-email');
       var svcs=Array.prototype.slice.call(form.querySelectorAll('input[name="bservice"]:checked')).map(function(c){return c.value;});
       var urg=(form.querySelector('input[name="burgency"]:checked')||{}).value||'\u2014';
       if(!name){ berr('Please add your name.', document.getElementById('bt-name')); return; }
@@ -655,7 +672,7 @@
     btn.addEventListener('click', function(ev){
       ev.preventDefault();
       var pe=document.getElementById('bmwErr'); if(pe)pe.remove();
-      var name=V('bm-name'), tel=V('bm-tel'), email=V('bm-email');
+      var name=withTitle(form, V('bm-name')), tel=V('bm-tel'), email=V('bm-email');
       var issues=Array.prototype.slice.call(form.querySelectorAll('input[name="bmissue"]:checked')).map(function(c){return c.value;});
       if(!name){ berr('Please add your name.', document.getElementById('bm-name')); return; }
       if(!tel && !email){ berr('Please add a mobile or email so we can reply.', document.getElementById('bm-tel')); return; }
@@ -729,6 +746,7 @@
         if (!V(cfg.telId) && !em) { err('Please add a mobile or email so we can reply.', cfg.telId); return; }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
+        if (fields['Name']) fields['Name'] = withTitle(form, fields['Name']);
         if (cfg.checkboxes) {
           var picked = Array.prototype.slice.call(form.querySelectorAll('input[name="' + cfg.checkboxes[0] + '"]:checked')).map(function (c) { return c.value; });
           if (!picked.length) { err('Please choose at least one option.'); return; }
