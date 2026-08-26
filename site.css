@@ -318,7 +318,10 @@ footer.ft { background: var(--navy-950); border-top: 1px solid var(--border-subt
 @keyframes wizIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 .wiz-step .form-grid { margin-top: 0; }
 .wiz-nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
-.wiz-nav .btn { flex: 1; margin: 0; height: 50px; width: auto; min-width: 0; }
+.wiz-nav .btn { flex: 1; margin: 0; height: 50px; width: auto; min-width: 0; padding: 0 18px; overflow: hidden; }
+.wiz-nav .btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* icons must not be squeezed away when the label shrinks */
+.wiz-nav .btn > span.sub-ic { flex: none; overflow: visible; }
 .wiz-nav [data-wiz-back] { flex: 0 0 auto; padding: 0 18px; width: auto; }
 @media (prefers-reduced-motion: reduce) { .wiz-step { animation: none; } }
 

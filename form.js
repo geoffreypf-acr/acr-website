@@ -255,7 +255,7 @@
       var dash = toDashCam();
       var waTxt = btn.getAttribute('data-wa-label') || 'Send on WhatsApp';
       var emTxt = btn.getAttribute('data-email-label') || 'Send by email';
-      if (labelEl) labelEl.textContent = dash ? 'Continue to dash cam options' : (wa ? waTxt : emTxt);
+      if (labelEl) labelEl.textContent = dash ? 'Dash cam options' : (wa ? waTxt : emTxt);
       if (icWa) icWa.style.display = (!dash && wa) ? '' : 'none';
       if (icMail) icMail.style.display = (!dash && !wa) ? '' : 'none';
       btn.classList.toggle('btn-wa', !dash && wa);

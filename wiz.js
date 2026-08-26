@@ -93,7 +93,7 @@
     var icMail = subBtn.querySelector('[data-ic-mail]');
     function syncBtn() {
       var dash = toDashCam(), wa = via() === 'whatsapp';
-      if (labelEl) labelEl.textContent = dash ? 'Continue to dash cam options'
+      if (labelEl) labelEl.textContent = dash ? 'Dash cam options'
                                               : (wa ? 'Send on WhatsApp' : 'Send by email');
       if (icWa) icWa.style.display = (!dash && wa) ? '' : 'none';
       if (icMail) icMail.style.display = (!dash && !wa) ? '' : 'none';
