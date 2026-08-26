@@ -951,14 +951,13 @@ window.__crmStart = function(){
       var hi = first ? 'Hello ' + first + ',' : 'Hello,';
       var TPL = [
         { id:'missed', label:'Call reply', subject:'Sorry we missed your call — ACR Automobile',
-          body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?\n\nKind regards,\nACR Automobile' },
+          body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?' },
         { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
-          body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.\n\nKind regards,\nACR Automobile' },
+          body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.' },
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
-          body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
-,
+          body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.' },
         { id:'review', label:'Review request', subject:'Thank you from ACR Automobile',
-          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.\n\nKind regards,\nACR Automobile' }
+          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.' }
       ];
       /* Whatever is most likely next for this record goes first: a review once the
          job is done, a call-back reply on a phone lead, chasing otherwise. */
@@ -969,6 +968,14 @@ window.__crmStart = function(){
         return id==='missed' ? 2 : (id==='review' ? 3 : 0);
       };
       TPL.sort(function(a,b){ return rank(a.id) - rank(b.id); });
+      /* Email goes out under the account's own signature, so signing the body as
+         well would sign it twice - the bodies above stop at the last sentence and
+         only the chat channels add a sign-off.
+         Line breaks: mailto: gets CRLF. Some desktop clients drop a bare \n and
+         run the whole message into a single paragraph, which is what happened. */
+      var SIGNOFF = '\n\nKind regards,\nACR Automobile';
+      var chatBody = function(t){ return t.body + SIGNOFF; };
+      var mailBody = function(t){ return t.body.replace(/\r?\n/g, '\r\n'); };
       var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
       var mail = (e.email||'').toString().trim();
       if(!digits && !mail){ box.style.display='none'; box.innerHTML=''; return; }
@@ -976,14 +983,14 @@ window.__crmStart = function(){
       var html = '<div class="tpl-lab">Quick messages</div>';
       TPL.forEach(function(t){
         html += '<div class="tpl-row"><span class="tpl-name">'+t.label+'</span>';
-        if(digits) html += '<a class="wa" target="_blank" rel="noopener" href="'+waLink(digits, t.body)+'">WhatsApp</a>'
-                        +  '<a href="sms:+'+digits+'&body='+encodeURIComponent(t.body)+'">SMS</a>';
+        if(digits) html += '<a class="wa" target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>'
+                        +  '<a href="sms:+'+digits+'&body='+encodeURIComponent(chatBody(t))+'">SMS</a>';
         /* The address must NOT be percent-encoded: mailto:alex%40x.com is rejected
            by desktop mail clients, which is why the Email link worked on a phone
            and did nothing on a computer. Gmail is listed first because it works
            whether or not a mail client is set up on the machine. */
         if(mail)   html += '<a class="gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>'
-                        +  '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body)+'">Mail app</a>';
+                        +  '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(mailBody(t))+'">Mail app</a>';
         html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
       });
       box.innerHTML = html;
@@ -991,8 +998,8 @@ window.__crmStart = function(){
         b.addEventListener('click', function(){
           var t = TPL.filter(function(x){ return x.id===b.getAttribute('data-tpl'); })[0];
           var done = function(){ var o=b.textContent; b.textContent='Copied'; setTimeout(function(){ b.textContent=o; },1400); };
-          if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t.body).then(done, done); }
-          else { var ta=document.createElement('textarea'); ta.value=t.body; document.body.appendChild(ta); ta.select();
+          if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(chatBody(t)).then(done, done); }
+          else { var ta=document.createElement('textarea'); ta.value=chatBody(t); document.body.appendChild(ta); ta.select();
                  try{ document.execCommand('copy'); }catch(err){} document.body.removeChild(ta); done(); }
         });
       });
