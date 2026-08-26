@@ -80,6 +80,11 @@
   .card .nm { font-weight: 600; font-size: 14px; color: var(--text-primary); }
   .card .meta { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
   .card .row2 { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .card .card-act { margin-top: 9px; }
+  .card .card-act .book { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-secondary);
+    font-family: var(--font-body); font-size: 11.5px; font-weight: 600; text-decoration: none; }
+  .card .card-act .book:hover { border-color: var(--signal-500); color: var(--text-primary); background: var(--accent-soft); }
   .chip { font-family: var(--font-mono); font-size: 10.5px; padding: 3px 7px; border-radius: 6px; background: var(--surface-inset); color: var(--text-muted); border: 1px solid var(--border-subtle); }
   .chip.val { color: var(--signal-300); border-color: rgba(47,161,204,.3); }
   .chip.fu { color: var(--warn-400); border-color: rgba(223,174,78,.3); }
@@ -574,6 +579,17 @@ window.__crmStart = function(){
          + encodeURIComponent(String(threadId || '').trim());
   }
 
+  /* Straight into the booking console with the job's details already filled in.
+     Used by the drawer's "Book this" and by the Book button on each card, so the
+     two cannot drift apart. */
+  function bookHref(e){
+    var p = new URLSearchParams({
+      name: nameOf(e), email: e.email||'', phone: e.mobile||'',
+      make: e.make||'', model: e.model||'', service: serviceLabel(e)
+    });
+    return 'booking-console-a7c93f.html#' + p.toString();
+  }
+
   /* Unnamed callers are stored as "Missed call 07…" by the Gmail sync. */
   function nameOf(e){ return (e.name||'').toString().replace(/^missed call\b/i,'Call'); }
   function prefContact(e){ return (e.preferredReply||e.preferredreply||e.preferred||'').toString().trim(); }
@@ -930,8 +946,14 @@ window.__crmStart = function(){
           +'<div class="meta">'+esc((isCall(e)
               ? [serviceLabel(e), whenOf(e)]
               : [serviceLabel(e), vehicle(e)]).filter(Boolean).join(' · ')||'—')+'</div>'
-          +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'');
+          +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'')
+          /* Booking is the next step for anything still open, so it should not
+             need the drawer first. Closed-out records don't get the button. */
+          +(isClosedOut(s.key) ? '' :
+             '<div class="card-act"><a class="book" href="'+bookHref(e)+'">Book the job \u2192</a></div>');
         card.addEventListener('click', function(){ openDrawer(e); });
+        var bk = card.querySelector('a.book');
+        if(bk) bk.addEventListener('click', function(ev){ ev.stopPropagation(); });  /* don't open the drawer too */
         card.addEventListener('dragstart', function(ev){ dragKey=e.timestamp; ev.dataTransfer.effectAllowed='move'; });
         body.appendChild(card);
       });
@@ -1110,9 +1132,7 @@ window.__crmStart = function(){
     $('dOwner').value = e.owner||'';
     $('dNotes').value = e.notes||'';
     setFnumUI(fnum(e));
-    // Book link → prefill booking console
-    var p = new URLSearchParams({ name:nameOf(e), email:e.email||'', phone:e.mobile||'', make:e.make||'', model:e.model||'', service:serviceLabel(e) });
-    $('dBook').href = 'booking-console-a7c93f.html#'+p.toString();
+    $('dBook').href = bookHref(e);
     $('drawer').classList.add('open'); $('drawerBg').classList.add('open');
   }
   function closeDrawer(){ $('drawer').classList.remove('open'); $('drawerBg').classList.remove('open'); current=null; }
