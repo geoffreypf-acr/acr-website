@@ -104,7 +104,10 @@ var CFG = {
   // form. Turn this on and each one becomes a record, built from the invoice:
   // name from Tide's "Hi <name>,", email from the To: line, the total as the
   // value. Source is 'tide', so to undo it you sort by source and delete them.
-  TIDE_CREATE_MISSING: false,
+  // On: an invoiced customer with no record gets one. Left on deliberately, so
+  // future phone and WhatsApp jobs cannot be invoiced and then lost - which is
+  // exactly what happened to the 23 this backfilled. Set false to stop that.
+  TIDE_CREATE_MISSING: true,
 
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
