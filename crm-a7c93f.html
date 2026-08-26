@@ -469,6 +469,9 @@ window.__crmStart = function(){
     var src=(e.source||'').toLowerCase();
     if(src==='phone') return 'Phone';
     if(src==='gmail') return 'Email';
+    /* Records built from a Tide invoice never came through the website - counting
+       them as web enquiries would overstate what the site brings in. */
+    if(src==='tide')  return 'Invoiced';
     if(src) return 'Website';
     return '';
   }

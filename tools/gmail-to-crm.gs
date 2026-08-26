@@ -504,6 +504,10 @@ function tideInvoices_(dryRun) {
     var body    = bodyText_(msg);
     var inv     = parseInvoice_(subject, body);
     inv.cancelled = /\bcancell?ed\b/i.test(subject);
+    /* Tide's payment mails say so in the subject. Threads are newest first, so if
+       the latest word on an invoice is that it was paid, the job is done - filing
+       it as "Invoice sent" would count settled work as open pipeline. */
+    inv.paid = /\b(paid|payment\s+received)\b/i.test(subject);
     /* Tide addresses the invoice to the customer and copies us, so the To: line
        is often the only place the customer appears. */
     var to      = '';
@@ -547,7 +551,7 @@ function tideInvoices_(dryRun) {
           email:          inv.email || '',
           service:        'Invoiced job',
           source:         'tide',
-          status:         CFG.TIDE_SET_STATUS || 'Invoice sent',
+          status:         inv.paid ? 'Completed' : (CFG.TIDE_SET_STATUS || 'Invoice sent'),
           value:          inv.total ? inv.total.replace(/[^\d.]/g, '') : '',
           details:        subject,
           preferredReply: 'Email',
@@ -575,7 +579,7 @@ function tideInvoices_(dryRun) {
       var cur = String(rows[hit][stCol] || '').trim();
       /* never drag a finished job backwards */
       if (cur !== 'Completed' && cur !== 'Lost' && cur !== 'Archive') {
-        sheet.getRange(hit + 2, stCol + 1).setValue(CFG.TIDE_SET_STATUS);
+        sheet.getRange(hit + 2, stCol + 1).setValue(inv.paid ? 'Completed' : CFG.TIDE_SET_STATUS);
       }
     }
     Logger.log('Attached %s to %s (matched on %s)', inv.ref || '(no number)', who, m.how);
