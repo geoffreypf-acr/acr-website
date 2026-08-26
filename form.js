@@ -83,7 +83,7 @@
   function personName(form) {
     if (!form) return '';
     var pick = function (sel) { var el = form.querySelector(sel); return el ? (el.value || '').trim() : ''; };
-    return [pick('[data-title]'), pick('.name-row input'), pick('[data-surname]')]
+    return [pick('[data-title]'), pick('[data-first]'), pick('[data-surname]')]
              .filter(Boolean).join(' ');
   }
 
@@ -105,13 +105,13 @@
     return (t.value || '').trim() ? '' : 'Please choose a title \u2014 Mr, Mrs, Ms, Miss and so on.';
   }
 
-  /* Every form puts the title select and the name input inside .name-row, so one
-     check covers all of them. */
+  /* Every form marks its three name fields with data-title / data-first /
+     data-surname, so one check covers all of them regardless of layout. */
   function badPerson(form) {
     var t = badTitle(form);
     if (t) return { msg: t, el: form.querySelector('[data-title]') };
     var checks = [
-      ['.name-row input', 'first name'],
+      ['[data-first]', 'first name'],
       ['[data-surname]',  'surname']
     ];
     for (var i = 0; i < checks.length; i++) {
@@ -472,7 +472,7 @@
         var pick = function (sel) { var el = form.querySelector(sel); return el ? (el.value || '').trim() : ''; };
         var hq = new URLSearchParams();
         var carry = {
-          title: pick('[data-title]'), first: pick('.name-row input'), surname: pick('[data-surname]'),
+          title: pick('[data-title]'), first: pick('[data-first]'), surname: pick('[data-surname]'),
           email: fields['Email'], mobile: fields['Mobile'],
           postcode: fields['Postcode'], make: fields['Make'], model: fields['Model'],
           year: fields['Year'], via: via, key: crmKey,

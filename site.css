@@ -291,11 +291,12 @@ footer.ft { background: var(--navy-950); border-top: 1px solid var(--border-subt
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .field.full { grid-column: 1 / -1; }
-/* Title + name on one line. The select is fixed-width so the name keeps the room
-   it had; both inherit the .field input/select styling above, so heights match. */
-.name-row { display: flex; gap: 8px; align-items: stretch; }
-.name-row select { flex: 0 0 96px; width: 96px; min-width: 0; }
-.name-row input { flex: 1 1 auto; min-width: 0; }
+/* Title / First name / Surname — three labelled columns across the full width of
+   the form, so none of them is squashed. The title only needs room for "Miss".
+   Below 640px they stack, which is the only way three boxes fit a phone. */
+.name-grid { grid-column: 1 / -1; display: grid; grid-template-columns: 116px 1fr 1fr; gap: 16px; align-items: end; }
+.name-grid > .field { min-width: 0; }
+@media (max-width: 640px) { .name-grid { grid-template-columns: 1fr; } }
 
 .field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .field input, .field select { height: 48px; padding: 0 14px; width: 100%; min-width: 0; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; box-shadow: inset 0 1px 2px rgba(0,0,0,.35); outline: none; transition: border-color .13s, box-shadow .13s; }
