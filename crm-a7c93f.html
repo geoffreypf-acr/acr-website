@@ -1054,17 +1054,22 @@ window.__crmStart = function(){
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
           body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.' },
         { id:'review', label:'Review request', subject:'Thank you from ACR Automobile',
-          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.' }
+          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.' },
+        { id:'decline', label:'Unable to help', subject:'Your enquiry \u2014 ACR Automobile',
+          body: hi + '\n\nThank you for your enquiry and for considering ACR Automobile.\n\nUnfortunately, we are unable to fulfil this request on this occasion.\n\nWe are sorry that we cannot help this time. Please do keep us in mind for any future work \u2014 we would be glad to hear from you.' }
       ];
       /* Whatever is most likely next for this record goes first: a review once the
-         job is done, a call-back reply on a phone lead, chasing otherwise. */
-      var rank = function(id){
-        var st = statusOf(e);
-        if (st === 'Completed')            return id==='review' ? 0 : (id==='missed' ? 3 : 1);
-        if (isCall(e) || st === 'Call back') return id==='missed' ? 0 : (id==='review' ? 3 : 1);
-        return id==='missed' ? 2 : (id==='review' ? 3 : 0);
+         job is done, the decline on one we have turned down, a call-back reply on
+         a phone lead, chasing otherwise. */
+      var ORDER = {
+        'Completed':  ['review','follow','close','decline','missed'],
+        'Lost':       ['decline','close','follow','review','missed'],
+        'Call back':  ['missed','follow','close','decline','review'],
+        'default':    ['follow','close','decline','missed','review']
       };
-      TPL.sort(function(a,b){ return rank(a.id) - rank(b.id); });
+      var stNow = statusOf(e);
+      var order = ORDER[stNow] || (isCall(e) ? ORDER['Call back'] : ORDER['default']);
+      TPL.sort(function(a,b){ return order.indexOf(a.id) - order.indexOf(b.id); });
       /* Email goes out under the account's own signature, so signing the body as
          well would sign it twice - the bodies above stop at the last sentence and
          only the chat channels add a sign-off.
