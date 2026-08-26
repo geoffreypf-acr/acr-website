@@ -123,6 +123,7 @@
   .chip.fnum.n1 { color: #4FCB8B; border-color: rgba(31,138,91,.45); background: rgba(31,138,91,.12); }
   .chip.fnum.n2 { color: var(--warn-400); border-color: rgba(223,174,78,.45); background: var(--warn-soft); }
   .chip.fnum.n3 { color: var(--alert-400); border-color: rgba(224,105,91,.5); background: var(--alert-soft); }
+  .chip.inv { color: #C98A5E; border-color: rgba(201,138,94,.4); }
   .chip.pref { color: var(--secure-400); border-color: rgba(87,187,223,.4); background: rgba(87,187,223,.1); }
   .crm-btn.del { flex: none; border-color: rgba(224,105,91,.35); color: var(--alert-400); }
   .crm-btn.del:hover { background: var(--alert-soft); border-color: var(--alert-400); }
@@ -585,7 +586,9 @@ window.__crmStart = function(){
   function bookHref(e){
     var p = new URLSearchParams({
       name: nameOf(e), email: e.email||'', phone: e.mobile||'',
-      make: e.make||'', model: e.model||'', service: serviceLabel(e)
+      make: e.make||'', model: e.model||'', service: serviceLabel(e),
+      invoice: (e.invoiceRef||'').toString().trim(),          /* filed by the Tide sync */
+      invoiceLink: (e.invoiceLink||'').toString().trim()
     });
     return 'booking-console-a7c93f.html#' + p.toString();
   }
@@ -936,6 +939,8 @@ window.__crmStart = function(){
         var fn=fnum(e); if(fn) chips.push('<span class="chip fnum n'+fn+'">Follow-up '+fn+'</span>');
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
+        var iv=(e.invoiceRef||'').toString().trim();
+        if(iv) chips.push('<span class="chip inv">'+esc(iv)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
         var ch=channelOf(e), pcv=prefContact(e);
         /* don't print the same word twice - a phone lead replied to by phone
@@ -1026,6 +1031,14 @@ window.__crmStart = function(){
     if(e.postcode) info.push('<b>Postcode:</b> '+esc(e.postcode));
     var pc=prefContact(e); if(pc) info.push('<b>Prefers:</b> '+esc(pc));
     if(e.registration) info.push('<b>Reg:</b> '+esc(e.registration));
+    /* Filed against this row by the Tide sync: the number, and a link straight to
+       the invoice email so the PDF is one click away. */
+    var invRef = (e.invoiceRef||'').toString().trim(), invLink = (e.invoiceLink||'').toString().trim();
+    if(invRef || invLink){
+      info.push('<b>Invoice:</b> ' + (invLink
+        ? '<a class="gm" href="'+esc(invLink)+'" target="_blank" rel="noopener">'+esc(invRef||'open in Gmail')+'</a>'
+        : esc(invRef)));
+    }
     if(e.timestamp){ var d=new Date(e.timestamp); if(!isNaN(d)) info.push('<b>Enquired:</b> '+d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})); }
     $('dInfo').innerHTML = info.join('<br>') || 'No contact details captured.';
     $('dInfo').querySelectorAll('button[data-copy]').forEach(function(b){

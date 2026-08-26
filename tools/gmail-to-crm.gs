@@ -20,6 +20,16 @@
  *
  * TO UNDO an import: sort the sheet by the `source` column and delete the rows
  * marked "gmail". Nothing else is touched.
+ *
+ * TIDE INVOICES
+ *   Run  dryRunTideInvoices  first. It prints which invoices it found, which
+ *   enquiry each would attach to, and which it could not match — WITHOUT writing
+ *   anything. Send that log over and the matcher can be tuned to Tide's real
+ *   wording before it touches the sheet.
+ *   Then  syncTideInvoices  files the invoice number and a link to the Gmail
+ *   thread in two new columns, invoiceRef and invoiceLink. The PDF is never
+ *   copied: the CRM and the booking console open the original email.
+ *   TO UNDO: clear those two columns. Nothing else is touched.
  */
 
 // ─────────────────────────── Configuration ───────────────────────────
@@ -72,6 +82,20 @@ var CFG = {
   BACKFILL_AFTER_DAYS: 3,
   BACKFILL_STATUS: 'On Hold',
 
+  // ── Tide invoices ──
+  // Invoices are raised in Tide and land in Gmail. This finds them and files a
+  // link to the email against the matching CRM row, so the invoice is one click
+  // from the enquiry and from the booking console.
+  // Nothing is copied out of Gmail: the row stores the invoice number and a
+  // deep link to the thread, so the PDF stays where it already is.
+  TIDE_SENDERS: ['tide.co', 'tide.com', 'no-reply@tide.co'],
+  TIDE_DAYS: 60,
+  // A Tide invoice email is matched to an enquiry by, in order of trust:
+  //   1. the customer's email address appearing in the invoice email
+  //   2. the customer's name appearing in the subject or body
+  // If neither matches, it is reported and skipped rather than guessed at.
+  TIDE_SET_STATUS: 'Invoice sent',   // set '' to leave the stage alone
+
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
     'formsubmit.co',        // already captured by the website forms
@@ -112,11 +136,17 @@ function syncMissedCalls() { return missedCalls_(false); }
 /** Log which missed calls WOULD become leads, write nothing. */
 function dryRunMissedCalls() { return missedCalls_(true); }
 
-/** Everything: email enquiries + missed calls. This is what the trigger runs. */
+/** Attach Tide invoices found in Gmail to the matching CRM rows. */
+function syncTideInvoices() { return tideInvoices_(false); }
+
+/** Log which Tide invoices WOULD be attached, and to whom. Run this first. */
+function dryRunTideInvoices() { return tideInvoices_(true); }
+
+/** Everything: email enquiries + missed calls + Tide invoices. The trigger runs this. */
 function syncAll() {
-  var a = run_(false), b = missedCalls_(false);
-  Logger.log('Total imported: %s email, %s missed calls.', a, b);
-  return a + b;
+  var a = run_(false), b = missedCalls_(false), c = tideInvoices_(false);
+  Logger.log('Total: %s email, %s missed calls, %s invoices attached.', a, b, c);
+  return a + b + c;
 }
 
 /** Run automatically every hour. Run once. */
@@ -153,6 +183,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Dry run — email enquiries', 'dryRunGmailToCrm')
     .addItem('Dry run — missed calls', 'dryRunMissedCalls')
+    .addItem('Dry run — Tide invoices', 'dryRunTideInvoices')
     .addSeparator()
     .addItem('Turn hourly sync ON', 'installGmailTrigger')
     .addItem('Turn hourly sync OFF', 'removeGmailTrigger')
@@ -408,6 +439,151 @@ function parseMissedCall_(raw) {
   var number = numPart.replace(/[\s()-]/g, '');
   if (number.replace(/\D/g, '').length < 7) return null;
   return { number: number, name: name, time: time };
+}
+
+/**
+ * Tide invoices → CRM rows.
+ *
+ * Nothing is copied out of Gmail. Each matched row gets the invoice number and a
+ * deep link to the Gmail thread, so the PDF stays where it already lives and the
+ * CRM and booking console both open the real thing.
+ *
+ * Matching is deliberately conservative: an email address match, else a full-name
+ * match, else it is reported and left alone. A wrongly attached invoice is worse
+ * than one you attach by hand.
+ */
+function tideInvoices_(dryRun) {
+  var ss    = SpreadsheetApp.openById(CFG.SHEET_ID);
+  var sheet = CFG.SHEET_NAME ? ss.getSheetByName(CFG.SHEET_NAME) : ss.getSheets()[0];
+  if (!sheet) throw new Error('Sheet not found — check CFG.SHEET_NAME.');
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                     .map(function (h) { return String(h || '').trim(); });
+  function needCol(name) {
+    var i = headers.indexOf(name);
+    if (i > -1) return i;
+    if (dryRun) { Logger.log('NOTE: a "%s" column would be added.', name); return -1; }
+    sheet.getRange(1, headers.length + 1).setValue(name);
+    headers.push(name);
+    return headers.length - 1;
+  }
+  var refCol  = needCol('invoiceRef');
+  var linkCol = needCol('invoiceLink');
+  var stCol   = headers.indexOf('status');
+  var nameCol = headers.indexOf('name');
+  var mailCol = headers.indexOf('email');
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('No enquiries to match against.'); return 0; }
+  var rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+
+  var query = '(' + CFG.TIDE_SENDERS.map(function (f) { return 'from:' + f; }).join(' OR ') + ')'
+            + ' newer_than:' + CFG.TIDE_DAYS + 'd -in:chats -in:draft -in:spam -in:trash';
+  var threads = GmailApp.search(query, 0, 200);
+  if (!threads.length) { Logger.log('No Tide mail in the last %s days. Query: %s', CFG.TIDE_DAYS, query); return 0; }
+  var bulk = GmailApp.getMessagesForThreads(threads);
+
+  var attached = 0, unmatched = [], skipped = 0;
+
+  threads.forEach(function (thread, idx) {
+    var msgs = bulk[idx] || thread.getMessages();
+    var msg  = msgs[msgs.length - 1];                 // the most recent in the thread
+    if (!msg) { skipped++; return; }
+    var subject = thread.getFirstMessageSubject() || '';
+    var body    = (msg.getPlainBody() || '');
+    var inv     = parseInvoice_(subject, body);
+    if (!inv.ref && !/invoice/i.test(subject + ' ' + body)) { skipped++; return; }
+
+    var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
+    var hit  = matchRow_(rows, inv, nameCol, mailCol);
+
+    if (hit < 0) {
+      unmatched.push((inv.ref || '(no number)') + ' — ' + (inv.email || inv.name || subject).slice(0, 60));
+      return;
+    }
+    /* already filed? */
+    if (refCol > -1 && String(rows[hit][refCol] || '').trim() === (inv.ref || '') &&
+        linkCol > -1 && String(rows[hit][linkCol] || '').trim() === link) { skipped++; return; }
+
+    var who = nameCol > -1 ? rows[hit][nameCol] : '(row ' + (hit + 2) + ')';
+    if (dryRun) {
+      Logger.log('  would attach %s%s -> %s', inv.ref || '(no number)',
+                 inv.total ? ' (' + inv.total + ')' : '', who);
+      attached++;
+      return;
+    }
+    if (refCol  > -1) sheet.getRange(hit + 2, refCol + 1).setValue(inv.ref || '');
+    if (linkCol > -1) sheet.getRange(hit + 2, linkCol + 1).setValue(link);
+    if (CFG.TIDE_SET_STATUS && stCol > -1) {
+      var cur = String(rows[hit][stCol] || '').trim();
+      /* never drag a finished job backwards */
+      if (cur !== 'Completed' && cur !== 'Lost' && cur !== 'Archive') {
+        sheet.getRange(hit + 2, stCol + 1).setValue(CFG.TIDE_SET_STATUS);
+      }
+    }
+    Logger.log('Attached %s to %s', inv.ref || '(no number)', who);
+    attached++;
+  });
+
+  if (unmatched.length) {
+    Logger.log('%s invoice(s) matched no enquiry — attach these by hand:', unmatched.length);
+    unmatched.forEach(function (u) { Logger.log('  ? %s', u); });
+  }
+  Logger.log('%s%s invoice(s) attached, %s skipped, %s unmatched.',
+             dryRun ? 'DRY RUN — ' : '', attached, skipped, unmatched.length);
+  return attached;
+}
+
+/**
+ * Pull what we need out of a Tide invoice email. Written permissively because
+ * Tide's wording varies between "invoice sent", "invoice paid" and reminders:
+ * anything that looks like an invoice number, a total, and the customer's own
+ * email address if it appears.
+ */
+function parseInvoice_(subject, body) {
+  var hay = subject + '\n' + body;
+  var ref = (hay.match(/\bINV[-\s]?0*(\d{1,8})\b/i)
+          || hay.match(/invoice\s*(?:no\.?|number|#)\s*([A-Z0-9][A-Z0-9-]{0,11})/i)
+          || hay.match(/\binvoice\s+([A-Z]{2,4}-?\d{1,8})\b/i));
+  var total = hay.match(/£\s?([\d,]+(?:\.\d{2})?)/);
+  var emails = (hay.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map(function (a) {
+    return a.replace(/[.,;:)\]]+$/, '');            /* a sentence's full stop is not part of the address */
+  }).filter(function (a) {
+    a = a.toLowerCase();
+    return a.indexOf('tide.co') < 0 && a.indexOf('acrautomobile.com') < 0
+        && a.indexOf('noreply') < 0 && a.indexOf('no-reply') < 0;
+  });
+  /* "Invoice INV-1042 for Alex Marin" / "... to Alex Marin" */
+  var nm = hay.match(/(?:invoice[^\n]{0,40}?\b(?:for|to)\s+)([A-Z][\w'’-]+(?:\s+[A-Z][\w'’-]+){1,3})/);
+  return {
+    /* Only call it INV-nnnn when the email actually said INV; otherwise keep the
+       number as written, rather than inventing a format Tide may not use. */
+    ref:   ref ? (/^INV[-\s]?\d/i.test(ref[0]) ? 'INV-' + ref[1] : ref[1]) : '',
+    total: total ? '£' + total[1] : '',
+    email: emails.length ? emails[0].toLowerCase() : '',
+    name:  nm ? nm[1].trim() : '',
+    hay:   hay
+  };
+}
+
+/** Email address first, then a full name that actually appears in the email. */
+function matchRow_(rows, inv, nameCol, mailCol) {
+  var i;
+  if (inv.email && mailCol > -1) {
+    for (i = 0; i < rows.length; i++) {
+      if (String(rows[i][mailCol] || '').trim().toLowerCase() === inv.email) return i;
+    }
+  }
+  if (nameCol > -1) {
+    /* Strip any title so "Mr Alex Marin" still matches "Alex Marin". */
+    for (i = 0; i < rows.length; i++) {
+      var full = String(rows[i][nameCol] || '').replace(/^(mr|mrs|ms|miss|mx|dr|prof)\.?\s+/i, '').trim();
+      if (full.length < 5) continue;                       /* too short to be safe */
+      if (inv.name && full.toLowerCase() === inv.name.toLowerCase()) return i;
+      if (inv.hay.toLowerCase().indexOf(full.toLowerCase()) > -1) return i;
+    }
+  }
+  return -1;
 }
 
 /** How many days ago was this? */

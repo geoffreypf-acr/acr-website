@@ -14,9 +14,8 @@
   .bk-head .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--warn-400); border: 1px solid rgba(223,174,78,.35); background: var(--warn-soft); padding: 4px 10px; border-radius: 999px; }
   .bk-head h1 { font-family: var(--font-display); font-size: 30px; letter-spacing: .02em; margin: 0; font-weight: 400; }
   .bk-head .sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
-  .bk-grid { display: grid; grid-template-columns: 1.15fr .85fr; grid-template-areas: "form enq" "form prev"; gap: 30px; align-items: start; }
+  .bk-grid { display: grid; grid-template-columns: 1.15fr .85fr; grid-template-areas: "form prev"; gap: 30px; align-items: start; }
   .formCol { grid-area: form; }
-  #enqCard { grid-area: enq; }
   .bk-preview { grid-area: prev; }
   .bk-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 24px; }
   .bk-card + .bk-card { margin-top: 22px; }
@@ -63,7 +62,7 @@
   .empty-rows { color: var(--text-muted); font-size: 13px; font-style: italic; padding: 8px 0; }
   .note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 14px 0 0; }
   .note a { color: var(--signal-300); }
-  @media (max-width: 900px) { .bk-grid { display: flex; flex-direction: column; } .bk-preview { position: static; } .bk-fields { grid-template-columns: 1fr; } #enqCard { order: -1; } .formCol { order: 1; } .bk-preview { order: 2; } }
+  @media (max-width: 900px) { .bk-grid { display: flex; flex-direction: column; } .bk-preview { position: static; } .bk-fields { grid-template-columns: 1fr; } .formCol { order: 1; } .bk-preview { order: 2; } }
   @media (max-width: 560px) {
     .bk-shell { padding: 16px 14px 60px; }
     .bk-head { gap: 12px; padding: 14px 0 18px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -144,16 +143,7 @@
   </div>
 
   <div class="bk-grid">
-    <!-- Incoming enquiries (own grid cell so it can sit at the top on mobile) -->
-    <div class="bk-card" id="enqCard">
-      <h3>Incoming enquiries <span id="enqCount" style="font-family:var(--font-mono);font-size:12px;color:var(--signal-300)"></span></h3>
-      <p class="hint">Website quote &amp; assessment forms, newest first. Click one to fill the booking form.</p>
-      <div class="savebar" style="margin-bottom:14px">
-        <button class="btn btn-ghost" id="btnRefresh" style="flex:1">Refresh enquiries</button>
-      </div>
-      <div class="rows" id="enqRows"></div>
-    </div>
-
+    
     <!-- LEFT: form -->
     <div class="formCol">
       <div class="bk-card">
@@ -513,7 +503,7 @@
   $('btnSave').addEventListener('click', function(){ if(!valid()) return; var l=load(); l.push(snapshot()); save(l); renderRows(); this.textContent='Saved ✓'; var self=this; setTimeout(function(){ self.textContent='Save booking'; },1400); });
   $('btnClear').addEventListener('click', function(){ ids.forEach(function(id){ var el=$(id); if(el) el.value = id==='time'?'10:00':''; }); document.querySelector('input[name=dur][value="60"]').checked=true; document.querySelector('input[name=loc][value="mobile"]').checked=true; $('otherWrap').style.display='none'; $('addrWrap').style.display=''; (function(){ var d=new Date(); d.setDate(d.getDate()+1); $('date').value=d.toISOString().slice(0,10); })(); render(); });
 
-  // ---- Incoming enquiries (Google Sheet) ----
+  // ---- Booking form helpers ----
   /* Paste your Google Apps Script Web App URL below (see SETUP-google-sheet.md). Leave '' to hide. */
   var SHEET_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyH3AZWwJwRs-guZUHtQdZG_-9wfajGhrkiFv2JMN_BrnB6KCJaJR4NQJdN69cSZOQRog/exec';
 
@@ -532,6 +522,21 @@
     if(t.indexOf('assessment')>-1) return 'Free vehicle security assessment';
     return '';
   }
+  /* A link to the Tide invoice email, shown under the Invoice reference field.
+     The PDF is left in Gmail rather than copied anywhere - one place, always
+     current, nothing to keep in step. */
+  function setInvoiceLink(url){
+    var wrap = $('invoice') && $('invoice').parentNode;
+    if(!wrap) return;
+    var old = document.getElementById('invLink');
+    if(old) old.remove();
+    if(!url) return;
+    var a = document.createElement('a');
+    a.id='invLink'; a.href=url; a.target='_blank'; a.rel='noopener';
+    a.textContent='Open the invoice email \u2197';
+    a.style.cssText='display:inline-block;margin-top:7px;font-size:12.5px;color:var(--signal-300);text-decoration:none';
+    wrap.appendChild(a);
+  }
   function useEnquiry(e){
     $('cName').value=e.name||''; $('cEmail').value=e.email||''; $('cPhone').value=ukPhone(e.mobile||e.phone||'');
     $('vMake').value=e.make||''; $('vModel').value=e.model||''; $('vReg').value=e.registration||e.reg||'';
@@ -540,36 +545,12 @@
     $('otherWrap').style.display = $('service').value==='__other' ? '' : 'none';
     var extra=[]; if(e.postcode) extra.push('Postcode: '+e.postcode); if(e.trim) extra.push('Trim: '+e.trim); if(e.fuel) extra.push('Fuel: '+e.fuel); if(e.message) extra.push(e.message);
     if(extra.length) $('notes').value=extra.join('\n');
+    /* The Tide invoice the sync filed against this enquiry, if there is one. */
+    if(e.invoice) $('invoice').value = e.invoice;
+    setInvoiceLink(e.invoiceLink || '');
     render(); window.scrollTo({top:0,behavior:'smooth'});
   }
-  function renderEnq(list){
-    var box=$('enqRows'), card=$('enqCard');
-    if(!SHEET_ENDPOINT){ box.innerHTML='<div class="empty-rows">Not connected yet. Open <b>SETUP-google-sheet.md</b> for the 5-minute setup, then paste your web-app URL into this page.</div>'; $('enqCount').textContent=''; return; }
-    if(!list){ box.innerHTML='<div class="empty-rows">Couldn\u2019t load enquiries. Check the web-app URL and that it\u2019s deployed to \u201cAnyone\u201d.</div>'; return; }
-    if(!list.length){ box.innerHTML='<div class="empty-rows">No enquiries yet.</div>'; $('enqCount').textContent='(0)'; return; }
-    $('enqCount').textContent='('+list.length+')';
-    box.innerHTML='';
-    list.forEach(function(e){
-      var when = e.timestamp ? new Date(e.timestamp) : null;
-      var w = when && !isNaN(when) ? when.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+'<br>'+when.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '—';
-      var veh=[e.make,e.model].filter(Boolean).join(' ');
-      var svc=e.service||e.interested||e.interestedIn||'';
-      var row=document.createElement('div'); row.className='brow';
-      row.innerHTML='<div class="when">'+w+'</div><div class="who"><b>'+esc(e.name||'—')+'</b><span>'+esc([svc,veh].filter(Boolean).join(' · ')||'—')+'</span></div><button class="ld">Use</button>';
-      row.querySelector('.ld').addEventListener('click', function(){ useEnquiry(e); });
-      box.appendChild(row);
-    });
-  }
-  function loadEnq(){
-    if(!SHEET_ENDPOINT){ renderEnq(); return; }
-    $('btnRefresh').textContent='Loading…'; $('btnRefresh').disabled=true;
-    fetch(SHEET_ENDPOINT, {method:'GET'}).then(function(r){ return r.json(); })
-      .then(function(data){ var list=Array.isArray(data)?data:(data.enquiries||data.rows||[]); list.sort(function(a,b){ return new Date(b.timestamp||0)-new Date(a.timestamp||0); }); renderEnq(list); })
-      .catch(function(){ renderEnq(null); })
-      .then(function(){ $('btnRefresh').textContent='Refresh enquiries'; $('btnRefresh').disabled=false; });
-  }
-  $('btnRefresh').addEventListener('click', loadEnq);
-  loadEnq();
+
 
   // Prefill from a CRM "Book this" link (booking-console#name=…&email=…)
   (function(){
@@ -577,7 +558,8 @@
     try{
       var p = new URLSearchParams(location.hash.slice(1));
       if(!p.get('name') && !p.get('email')) return;
-      useEnquiry({ name:p.get('name')||'', email:p.get('email')||'', mobile:p.get('phone')||'', make:p.get('make')||'', model:p.get('model')||'', service:p.get('service')||'' });
+      useEnquiry({ name:p.get('name')||'', email:p.get('email')||'', mobile:p.get('phone')||'', make:p.get('make')||'', model:p.get('model')||'', service:p.get('service')||'',
+                   invoice:p.get('invoice')||'', invoiceLink:p.get('invoiceLink')||'' });
     }catch(_){}
   })();
 
