@@ -1,19 +1,19 @@
 /**
- * ACR — Gmail → CRM lead capture
+ * ACR - Gmail -> CRM lead capture
  * ================================================================
  * Catches enquiries that never touch a website form: people who email
  * info@acrautomobile.com directly, or who reply to something and start a new
  * conversation. Those currently live only in the inbox and never reach the
- * CRM board — which is how enquiries get missed.
+ * CRM board - which is how enquiries get missed.
  *
  * Form submissions are NOT re-imported: FormSubmit is excluded below, because
  * those already write to the sheet through the website.
  *
  * HOW TO INSTALL
- *   1. Open the CRM sheet → Extensions → Apps Script
- *   2. File → + → Script, name it "gmailToCrm", paste this whole file in
+ *   1. Open the CRM sheet -> Extensions -> Apps Script
+ *   2. File -> + -> Script, name it "gmailToCrm", paste this whole file in
  *   3. Save, then run  dryRunGmailToCrm  once and click "Review permissions"
- *      (it needs Gmail read + Sheets write). Check the Execution log — it will
+ *      (it needs Gmail read + Sheets write). Check the Execution log - it will
  *      list what it WOULD add, without writing anything.
  *   4. Happy? Run  syncGmailToCrm  once to import for real.
  *   5. Run  installGmailTrigger  once to have it run automatically every hour.
@@ -23,7 +23,7 @@
  *
  * TIDE INVOICES
  *   Run  dryRunTideInvoices  first. It prints which invoices it found, which
- *   enquiry each would attach to, and which it could not match — WITHOUT writing
+ *   enquiry each would attach to, and which it could not match - WITHOUT writing
  *   anything. Send that log over and the matcher can be tuned to Tide's real
  *   wording before it touches the sheet.
  *   Then  syncTideInvoices  files the invoice number and a link to the Gmail
@@ -32,7 +32,7 @@
  *   TO UNDO: clear those two columns. Nothing else is touched.
  */
 
-// ─────────────────────────── Configuration ───────────────────────────
+// --------------------------- Configuration ---------------------------
 
 var CFG = {
   SHEET_ID:   '1MszFXo--wsC5ozeh6SLnzqG2LG2fcoA4ZoNhwsOp29o',
@@ -62,7 +62,7 @@ var CFG = {
     'booking', 'book in', 'appointment', 'enquiry', 'enquire', 'availability'
   ],
 
-  // ── Missed calls ──
+  // -- Missed calls --
   // Your phone already emails info@ every missed call, subject "Missed Call",
   // body "+447xxxxxxxxx[Name] HHMM". Those are inbound leads with nowhere to go.
   MISSED_CALL_SUBJECT: 'Missed Call',
@@ -82,7 +82,7 @@ var CFG = {
   BACKFILL_AFTER_DAYS: 3,
   BACKFILL_STATUS: 'On Hold',
 
-  // ── Tide invoices ──
+  // -- Tide invoices --
   // Invoices are raised in Tide and land in Gmail. This finds them and files a
   // link to the email against the matching CRM row, so the invoice is one click
   // from the enquiry and from the booking console.
@@ -99,6 +99,12 @@ var CFG = {
   // run. Turn off once matching is behaving.
   TIDE_DEBUG: true,
   TIDE_DEBUG_MAX: 12,                // don't flood the log
+  // The dry run showed 52 invoiced customers with NO record on the board at all -
+  // people who came by phone or WhatsApp and were invoiced without ever filling a
+  // form. Turn this on and each one becomes a record, built from the invoice:
+  // name from Tide's "Hi <name>,", email from the To: line, the total as the
+  // value. Source is 'tide', so to undo it you sort by source and delete them.
+  TIDE_CREATE_MISSING: false,
 
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
@@ -126,7 +132,7 @@ var CFG = {
   ]
 };
 
-// ─────────────────────────── Entry points ───────────────────────────
+// --------------------------- Entry points ---------------------------
 
 /** Import for real. */
 function syncGmailToCrm() { return run_(false); }
@@ -177,7 +183,7 @@ function removeGmailTrigger() {
  * without opening the script editor.
  *
  * This only appears if the script is BOUND to the sheet - i.e. you created it
- * from the sheet via Extensions → Apps Script. If you made a standalone script
+ * from the sheet via Extensions -> Apps Script. If you made a standalone script
  * the menu will not show, and you run the functions from the editor instead.
  */
 function onOpen() {
@@ -185,9 +191,9 @@ function onOpen() {
     .createMenu('ACR CRM')
     .addItem('Sync now (email + calls + invoices)', 'syncAll')
     .addSeparator()
-    .addItem('Dry run — email enquiries', 'dryRunGmailToCrm')
-    .addItem('Dry run — missed calls', 'dryRunMissedCalls')
-    .addItem('Dry run — Tide invoices', 'dryRunTideInvoices')
+    .addItem('Dry run - email enquiries', 'dryRunGmailToCrm')
+    .addItem('Dry run - missed calls', 'dryRunMissedCalls')
+    .addItem('Dry run - Tide invoices', 'dryRunTideInvoices')
     .addSeparator()
     .addItem('Turn hourly sync ON', 'installGmailTrigger')
     .addItem('Turn hourly sync OFF', 'removeGmailTrigger')
@@ -195,7 +201,7 @@ function onOpen() {
 }
 
 /**
- * FORCE PULL — one small edit in Code.gs
+ * FORCE PULL - one small edit in Code.gs
  * ================================================================
  * This project already contains the CRM's own doGet (in Code.gs), so a second
  * doGet here would simply be ignored. Instead, add these five lines as the
@@ -212,17 +218,17 @@ function onOpen() {
  *     ...the existing code that returns the rows stays exactly as it is...
  *   }
  *
- * Save. Nothing needs redeploying — an existing deployment always runs the
+ * Save. Nothing needs redeploying - an existing deployment always runs the
  * latest saved code. The CRM's Force pull button then works immediately,
  * because it calls the endpoint it already uses.
  */
 
-// ─────────────────────────── Implementation ───────────────────────────
+// --------------------------- Implementation ---------------------------
 
 function run_(dryRun) {
   var ss    = SpreadsheetApp.openById(CFG.SHEET_ID);
   var sheet = CFG.SHEET_NAME ? ss.getSheetByName(CFG.SHEET_NAME) : ss.getSheets()[0];
-  if (!sheet) throw new Error('Sheet not found — check CFG.SHEET_NAME.');
+  if (!sheet) throw new Error('Sheet not found - check CFG.SHEET_NAME.');
 
   var lastCol = sheet.getLastColumn();
   var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) {
@@ -292,7 +298,7 @@ function run_(dryRun) {
         service:        'Email enquiry',
         source:         'gmail',
         status:         'New',
-        details:        subject + (body ? ' — ' + body : ''),
+        details:        subject + (body ? ' - ' + body : ''),
         preferredReply: 'Email',
         threadId:       id
       }
@@ -300,7 +306,7 @@ function run_(dryRun) {
   });
 
   if (dryRun) {
-    Logger.log('DRY RUN — %s new enquiries would be imported, %s skipped.', added.length, skipped);
+    Logger.log('DRY RUN - %s new enquiries would be imported, %s skipped.', added.length, skipped);
     added.forEach(function (a) {
       Logger.log('  + %s <%s>  |  %s', a.row.name, a.row.email, a.row.details.slice(0, 90));
     });
@@ -379,13 +385,13 @@ function missedCalls_(dryRun) {
       source:         'phone',
       status:         ageDays_(msg.getDate()) > CFG.BACKFILL_AFTER_DAYS ? CFG.BACKFILL_STATUS : 'New',
       preferredReply: 'Phone',
-      details:        'Missed call' + (when ? ' at ' + when.slice(0,-2) + ':' + when.slice(-2) : '') + (known ? ' — known contact: ' + known : ''),
+      details:        'Missed call' + (when ? ' at ' + when.slice(0,-2) + ':' + when.slice(-2) : '') + (known ? ' - known contact: ' + known : ''),
       threadId:       id
     }});
   });
 
   if (dryRun) {
-    Logger.log('DRY RUN (missed calls) — %s would become leads, %s skipped.', added.length, skipped);
+    Logger.log('DRY RUN (missed calls) - %s would become leads, %s skipped.', added.length, skipped);
     added.forEach(function (a) { Logger.log('  + %s  %s', a.row.mobile, a.row.details); });
     return added.length;
   }
@@ -446,7 +452,7 @@ function parseMissedCall_(raw) {
 }
 
 /**
- * Tide invoices → CRM rows.
+ * Tide invoices -> CRM rows.
  *
  * Nothing is copied out of Gmail. Each matched row gets the invoice number and a
  * deep link to the Gmail thread, so the PDF stays where it already lives and the
@@ -459,7 +465,7 @@ function parseMissedCall_(raw) {
 function tideInvoices_(dryRun) {
   var ss    = SpreadsheetApp.openById(CFG.SHEET_ID);
   var sheet = CFG.SHEET_NAME ? ss.getSheetByName(CFG.SHEET_NAME) : ss.getSheets()[0];
-  if (!sheet) throw new Error('Sheet not found — check CFG.SHEET_NAME.');
+  if (!sheet) throw new Error('Sheet not found - check CFG.SHEET_NAME.');
 
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
                      .map(function (h) { return String(h || '').trim(); });
@@ -487,7 +493,7 @@ function tideInvoices_(dryRun) {
   if (!threads.length) { Logger.log('No Tide mail in the last %s days. Query: %s', CFG.TIDE_DAYS, query); return 0; }
   var bulk = GmailApp.getMessagesForThreads(threads);
 
-  var attached = 0, unmatched = [], skipped = 0, shown = 0;
+  var attached = 0, unmatched = [], skipped = 0, shown = 0, seenRef = {}, cancelled = [], created = 0, newRows = [];
 
   threads.forEach(function (thread, idx) {
     var msgs = bulk[idx] || thread.getMessages();
@@ -496,12 +502,19 @@ function tideInvoices_(dryRun) {
     var subject = thread.getFirstMessageSubject() || '';
     var body    = bodyText_(msg);
     var inv     = parseInvoice_(subject, body);
+    inv.cancelled = /\bcancell?ed\b/i.test(subject);
     /* Tide addresses the invoice to the customer and copies us, so the To: line
        is often the only place the customer appears. */
     var to      = '';
     try { to = (msg.getTo() || '') + ' ' + (msg.getCc() || ''); } catch (e) {}
     if (to) { inv.hay += '\n' + to; if (!inv.email) inv.email = firstOutsideEmail_(to); }
     if (!inv.ref && !/invoice/i.test(subject + ' ' + body)) { skipped++; return; }
+    /* Tide mails the same invoice more than once - issued, reminder, paid,
+       cancelled. Threads come back newest first, so the first sighting of a
+       number is the current one and later ones are history. */
+    if (inv.ref && seenRef[inv.ref]) { skipped++; return; }
+    if (inv.ref) seenRef[inv.ref] = true;
+    if (inv.cancelled) { cancelled.push(inv.ref || subject.slice(0, 40)); skipped++; return; }
 
     var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
     var hit  = matchRow_(rows, inv, nameCol, mailCol);
@@ -517,7 +530,26 @@ function tideInvoices_(dryRun) {
     }
 
     if (hit < 0) {
-      unmatched.push((inv.ref || '(no number)') + ' — ' + (inv.email || inv.name || subject).slice(0, 60));
+      unmatched.push((inv.ref || '(no number)') + ' - '
+                     + (inv.name ? inv.name + ' <' + (inv.email || '?') + '>' : (inv.email || subject)).slice(0, 70));
+      /* An invoice with no record means a paying customer who is not on the board
+         at all. Optionally put them there rather than losing them. */
+      if (CFG.TIDE_CREATE_MISSING && (inv.email || inv.name)) {
+        newRows.push({
+          timestamp:      msg.getDate().toISOString(),
+          name:           inv.name || inv.email,
+          email:          inv.email || '',
+          service:        'Invoiced job',
+          source:         'tide',
+          status:         CFG.TIDE_SET_STATUS || 'Invoice sent',
+          value:          inv.total ? inv.total.replace(/[^\d.]/g, '') : '',
+          details:        subject,
+          preferredReply: 'Email',
+          invoiceRef:     inv.ref || '',
+          invoiceLink:    link
+        });
+        created++;
+      }
       return;
     }
     /* already filed? */
@@ -544,13 +576,24 @@ function tideInvoices_(dryRun) {
     attached++;
   });
 
+  if (cancelled.length) {
+    Logger.log('%s cancelled invoice(s) ignored: %s', cancelled.length, cancelled.join(', '));
+  }
   if (unmatched.length) {
-    Logger.log('%s invoice(s) matched no enquiry — attach these by hand:', unmatched.length);
+    Logger.log('%s invoice(s) matched no enquiry%s:', unmatched.length,
+               CFG.TIDE_CREATE_MISSING ? ' - added as new records' : ' - attach these by hand, or set TIDE_CREATE_MISSING');
     unmatched.forEach(function (u) { Logger.log('  ? %s', u); });
   }
-  Logger.log('%s%s invoice(s) attached, %s skipped, %s unmatched.',
-             dryRun ? 'DRY RUN — ' : '', attached, skipped, unmatched.length);
-  return attached;
+  /* Write any new records in one go rather than a row at a time. */
+  if (newRows.length && !dryRun) {
+    var out = newRows.map(function (r) {
+      return headers.map(function (h) { return r.hasOwnProperty(h) ? r[h] : ''; });
+    });
+    sheet.getRange(sheet.getLastRow() + 1, 1, out.length, headers.length).setValues(out);
+  }
+  Logger.log('%s%s invoice(s) attached, %s new record(s), %s skipped, %s unmatched.',
+             dryRun ? 'DRY RUN - ' : '', attached, created, skipped, unmatched.length);
+  return attached + created;
 }
 
 /**
@@ -563,11 +606,12 @@ function parseInvoice_(subject, body) {
   var hay = subject + '\n' + body;
   /* Keep the number EXACTLY as Tide wrote it, padding included: the real
      invoices are INV-0078, and an earlier version stripped the zeros and
-     reported INV-78 — a reference that does not exist. */
+     reported INV-78 - a reference that does not exist. */
   var ref = (hay.match(/\bINV[-\s]?(\d{1,8})\b/i)
           || hay.match(/invoice\s*(?:no\.?|number|#)\s*([A-Z0-9][A-Z0-9-]{0,11})/i)
           || hay.match(/\binvoice\s+([A-Z]{2,4}-?\d{1,8})\b/i));
-  var total = hay.match(/£\s?([\d,]+(?:\.\d{2})?)/);
+  var total = hay.match(/(?:total(?:\s+amount)?(?:\s+of)?\s*:?\s*)\u00a3\s?([\d,]+(?:\.\d{2})?)/i)
+           || hay.match(/\u00a3\s?([\d,]+(?:\.\d{2})?)/);
   var emails = (hay.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map(function (a) {
     return a.replace(/[.,;:)\]]+$/, '');            /* a sentence's full stop is not part of the address */
   }).filter(function (a) {
@@ -575,13 +619,16 @@ function parseInvoice_(subject, body) {
     return a.indexOf('tide.co') < 0 && a.indexOf('acrautomobile.com') < 0
         && a.indexOf('noreply') < 0 && a.indexOf('no-reply') < 0;
   });
-  /* "Invoice INV-1042 for Alex Marin" / "... to Alex Marin" */
-  var nm = hay.match(/(?:invoice[^\n]{0,40}?\b(?:for|to)\s+)([A-Z][\w'’-]+(?:\s+[A-Z][\w'’-]+){1,3})/);
+  /* Tide opens every invoice mail with "Hi <customer>," - the one reliable place
+     the name appears. "Hi Arya ali-kamal," shows the second word is not always
+     capitalised, so do not require it to be. */
+  var nm = hay.match(/\bHi\s+([A-Z][\w'\u2019.-]*(?:\s+[\w'\u2019.-]+){0,3})\s*,/)
+        || hay.match(/(?:invoice[^\n]{0,40}?\b(?:for|to)\s+)([A-Z][\w'\u2019-]+(?:\s+[A-Z][\w'\u2019-]+){1,3})/);
   return {
     /* Only call it INV-nnnn when the email actually said INV; otherwise keep the
        number as written, rather than inventing a format Tide may not use. */
     ref:   ref ? (/^INV[-\s]?\d/i.test(ref[0]) ? 'INV-' + ref[1] : ref[1]) : '',
-    total: total ? '£' + total[1] : '',
+    total: total ? '\u00a3' + total[1] : '',
     email: emails.length ? emails[0].toLowerCase() : '',
     name:  nm ? nm[1].trim() : '',
     hay:   hay
