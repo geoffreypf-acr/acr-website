@@ -932,12 +932,19 @@ window.__crmStart = function(){
           body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.\n\nKind regards,\nACR Automobile' },
         { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
           body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.\n\nKind regards,\nACR Automobile' }
+,
+        { id:'review', label:'Review request', subject:'Thank you from ACR Automobile',
+          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.\n\nKind regards,\nACR Automobile' }
       ];
-      if (isCall(e) || statusOf(e)==='Call back') {
-        TPL.sort(function(a,b){ return (a.id==='missed'?-1:0) - (b.id==='missed'?-1:0); });
-      } else {
-        TPL.sort(function(a,b){ return (a.id==='missed'?1:0) - (b.id==='missed'?1:0); });
-      }
+      /* Whatever is most likely next for this record goes first: a review once the
+         job is done, a call-back reply on a phone lead, chasing otherwise. */
+      var rank = function(id){
+        var st = statusOf(e);
+        if (st === 'Completed')            return id==='review' ? 0 : (id==='missed' ? 3 : 1);
+        if (isCall(e) || st === 'Call back') return id==='missed' ? 0 : (id==='review' ? 3 : 1);
+        return id==='missed' ? 2 : (id==='review' ? 3 : 0);
+      };
+      TPL.sort(function(a,b){ return rank(a.id) - rank(b.id); });
       var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
       var mail = (e.email||'').toString().trim();
       if(!digits && !mail){ box.style.display='none'; box.innerHTML=''; return; }
