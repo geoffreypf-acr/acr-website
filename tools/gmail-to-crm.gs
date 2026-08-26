@@ -95,6 +95,10 @@ var CFG = {
   //   2. the customer's name appearing in the subject or body
   // If neither matches, it is reported and skipped rather than guessed at.
   TIDE_SET_STATUS: 'Invoice sent',   // set '' to leave the stage alone
+  // Print subject / To: / what was parsed for each invoice email during a dry
+  // run. Turn off once matching is behaving.
+  TIDE_DEBUG: true,
+  TIDE_DEBUG_MAX: 12,                // don't flood the log
 
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
@@ -483,19 +487,34 @@ function tideInvoices_(dryRun) {
   if (!threads.length) { Logger.log('No Tide mail in the last %s days. Query: %s', CFG.TIDE_DAYS, query); return 0; }
   var bulk = GmailApp.getMessagesForThreads(threads);
 
-  var attached = 0, unmatched = [], skipped = 0;
+  var attached = 0, unmatched = [], skipped = 0, shown = 0;
 
   threads.forEach(function (thread, idx) {
     var msgs = bulk[idx] || thread.getMessages();
     var msg  = msgs[msgs.length - 1];                 // the most recent in the thread
     if (!msg) { skipped++; return; }
     var subject = thread.getFirstMessageSubject() || '';
-    var body    = (msg.getPlainBody() || '');
+    var body    = bodyText_(msg);
     var inv     = parseInvoice_(subject, body);
+    /* Tide addresses the invoice to the customer and copies us, so the To: line
+       is often the only place the customer appears. */
+    var to      = '';
+    try { to = (msg.getTo() || '') + ' ' + (msg.getCc() || ''); } catch (e) {}
+    if (to) { inv.hay += '\n' + to; if (!inv.email) inv.email = firstOutsideEmail_(to); }
     if (!inv.ref && !/invoice/i.test(subject + ' ' + body)) { skipped++; return; }
 
     var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
     var hit  = matchRow_(rows, inv, nameCol, mailCol);
+
+    if (dryRun && CFG.TIDE_DEBUG && shown < CFG.TIDE_DEBUG_MAX) {
+      shown++;
+      Logger.log('--- %s', subject.slice(0, 80));
+      Logger.log('    to=%s', to.slice(0, 90) || '(none)');
+      Logger.log('    ref=%s total=%s email=%s name=%s match=%s',
+                 inv.ref || '-', inv.total || '-', inv.email || '-', inv.name || '-',
+                 hit < 0 ? 'NONE' : (nameCol > -1 ? rows[hit][nameCol] : 'row ' + (hit + 2)));
+      Logger.log('    body[0..160]=%s', body.replace(/\s+/g, ' ').slice(0, 160));
+    }
 
     if (hit < 0) {
       unmatched.push((inv.ref || '(no number)') + ' — ' + (inv.email || inv.name || subject).slice(0, 60));
@@ -542,7 +561,10 @@ function tideInvoices_(dryRun) {
  */
 function parseInvoice_(subject, body) {
   var hay = subject + '\n' + body;
-  var ref = (hay.match(/\bINV[-\s]?0*(\d{1,8})\b/i)
+  /* Keep the number EXACTLY as Tide wrote it, padding included: the real
+     invoices are INV-0078, and an earlier version stripped the zeros and
+     reported INV-78 — a reference that does not exist. */
+  var ref = (hay.match(/\bINV[-\s]?(\d{1,8})\b/i)
           || hay.match(/invoice\s*(?:no\.?|number|#)\s*([A-Z0-9][A-Z0-9-]{0,11})/i)
           || hay.match(/\binvoice\s+([A-Z]{2,4}-?\d{1,8})\b/i));
   var total = hay.match(/£\s?([\d,]+(?:\.\d{2})?)/);
@@ -564,6 +586,34 @@ function parseInvoice_(subject, body) {
     name:  nm ? nm[1].trim() : '',
     hay:   hay
   };
+}
+
+/** Plain text if there is any, otherwise the HTML with its tags taken out. */
+function bodyText_(msg) {
+  var t = '';
+  try { t = msg.getPlainBody() || ''; } catch (e) {}
+  if (t.replace(/\s+/g, '').length > 40) return t;
+  try {
+    var h = msg.getBody() || '';
+    return h.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+            .replace(/[ \t]+/g, ' ');
+  } catch (e) { return t; }
+}
+
+/** The first address in a string that is not ours, Tide's or a no-reply. */
+function firstOutsideEmail_(text) {
+  var all = (String(text || '').match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map(function (a) {
+    return a.replace(/[.,;:)\]>]+$/, '').toLowerCase();
+  });
+  for (var i = 0; i < all.length; i++) {
+    var a = all[i];
+    if (a.indexOf('tide.co') < 0 && a.indexOf('acrautomobile.com') < 0
+        && a.indexOf('noreply') < 0 && a.indexOf('no-reply') < 0) return a;
+  }
+  return '';
 }
 
 /** Email address first, then a full name that actually appears in the email. */
