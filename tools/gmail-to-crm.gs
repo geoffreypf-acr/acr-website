@@ -482,6 +482,7 @@ function tideInvoices_(dryRun) {
   var stCol   = headers.indexOf('status');
   var nameCol = headers.indexOf('name');
   var mailCol = headers.indexOf('email');
+  var mobCol  = headers.indexOf('mobile');
 
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) { Logger.log('No enquiries to match against.'); return 0; }
@@ -520,7 +521,8 @@ function tideInvoices_(dryRun) {
     }
 
     var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
-    var hit  = matchRow_(rows, inv, nameCol, mailCol);
+    var m    = matchRow_(rows, inv, nameCol, mailCol, mobCol);
+    var hit  = m.i;
 
     if (dryRun && CFG.TIDE_DEBUG && shown < CFG.TIDE_DEBUG_MAX) {
       shown++;
@@ -528,13 +530,14 @@ function tideInvoices_(dryRun) {
       Logger.log('    to=%s', to.slice(0, 90) || '(none)');
       Logger.log('    ref=%s total=%s email=%s name=%s match=%s',
                  inv.ref || '-', inv.total || '-', inv.email || '-', inv.name || '-',
-                 hit < 0 ? 'NONE' : (nameCol > -1 ? rows[hit][nameCol] : 'row ' + (hit + 2)));
+                 hit < 0 ? 'NONE' : (nameCol > -1 ? rows[hit][nameCol] : 'row ' + (hit + 2)) + ' [' + m.how + ']');
       Logger.log('    body[0..160]=%s', body.replace(/\s+/g, ' ').slice(0, 160));
     }
 
     if (hit < 0) {
       unmatched.push((inv.ref || '(no number)') + ' - '
-                     + (inv.name ? inv.name + ' <' + (inv.email || '?') + '>' : (inv.email || subject)).slice(0, 70));
+                     + (inv.name ? inv.name + ' <' + (inv.email || '?') + '>' : (inv.email || subject)).slice(0, 70)
+                     + (m.near && m.near.length ? '   [same first name on the board: ' + m.near.join(', ') + ']' : ''));
       /* An invoice with no record means a paying customer who is not on the board
          at all. Optionally put them there rather than losing them. */
       if (CFG.TIDE_CREATE_MISSING && (inv.email || inv.name)) {
@@ -561,8 +564,8 @@ function tideInvoices_(dryRun) {
 
     var who = nameCol > -1 ? rows[hit][nameCol] : '(row ' + (hit + 2) + ')';
     if (dryRun) {
-      Logger.log('  would attach %s%s -> %s', inv.ref || '(no number)',
-                 inv.total ? ' (' + inv.total + ')' : '', who);
+      Logger.log('  would attach %s%s -> %s   (matched on %s)', inv.ref || '(no number)',
+                 inv.total ? ' (' + inv.total + ')' : '', who, m.how);
       attached++;
       return;
     }
@@ -575,7 +578,7 @@ function tideInvoices_(dryRun) {
         sheet.getRange(hit + 2, stCol + 1).setValue(CFG.TIDE_SET_STATUS);
       }
     }
-    Logger.log('Attached %s to %s', inv.ref || '(no number)', who);
+    Logger.log('Attached %s to %s (matched on %s)', inv.ref || '(no number)', who, m.how);
     attached++;
   });
 
@@ -627,7 +630,9 @@ function parseInvoice_(subject, body) {
      capitalised, so do not require it to be. */
   var nm = hay.match(/\bHi\s+([A-Z][\w'\u2019.-]*(?:\s+[\w'\u2019.-]+){0,3})\s*,/)
         || hay.match(/(?:invoice[^\n]{0,40}?\b(?:for|to)\s+)([A-Z][\w'\u2019-]+(?:\s+[A-Z][\w'\u2019-]+){1,3})/);
+  var phones = (hay.match(/(?:\+44\s?|0)7\d{3}[\s-]?\d{3}[\s-]?\d{3}/g) || []);
   return {
+    phones: phones,
     /* Only call it INV-nnnn when the email actually said INV; otherwise keep the
        number as written, rather than inventing a format Tide may not use. */
     ref:   ref ? (/^INV[-\s]?\d/i.test(ref[0]) ? 'INV-' + ref[1] : ref[1]) : '',
@@ -666,24 +671,88 @@ function firstOutsideEmail_(text) {
   return '';
 }
 
-/** Email address first, then a full name that actually appears in the email. */
-function matchRow_(rows, inv, nameCol, mailCol) {
-  var i;
+/** Names compare badly raw: titles, case, punctuation, double spaces. */
+function normName_(v) {
+  return String(v || '')
+    .replace(/^(mr|mrs|ms|miss|mx|dr|prof)\.?\s+/i, '')
+    .replace(/[^A-Za-z\u00c0-\u024f\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** "alex marin" -> "a marin", so "Alex Marin" and "A. Marin" meet. */
+function initialSurname_(n) {
+  var p = n.split(' ');
+  if (p.length < 2) return '';
+  return p[0].charAt(0) + ' ' + p[p.length - 1];
+}
+
+/**
+ * Find the enquiry an invoice belongs to, strongest evidence first, and say which
+ * test carried it so the log can be audited:
+ *
+ *   email  - the invoice's To: address is the address on the record
+ *   phone  - a mobile in the invoice is the mobile on the record
+ *   name   - the full name matches once titles, case and punctuation are ignored
+ *   surname- first initial + surname match ("A Marin" = "Alex Marin")
+ *   inbody - the record's full name appears verbatim in the invoice
+ *
+ * Anything weaker - a lone first name, a surname on its own - is returned as a
+ * near miss for you to confirm, never attached automatically. Filing an invoice
+ * against the wrong customer is worse than filing it by hand.
+ */
+function matchRow_(rows, inv, nameCol, mailCol, mobCol) {
+  var i, near = [];
+
   if (inv.email && mailCol > -1) {
     for (i = 0; i < rows.length; i++) {
-      if (String(rows[i][mailCol] || '').trim().toLowerCase() === inv.email) return i;
+      if (String(rows[i][mailCol] || '').trim().toLowerCase() === inv.email) return { i: i, how: 'email' };
     }
   }
-  if (nameCol > -1) {
-    /* Strip any title so "Mr Alex Marin" still matches "Alex Marin". */
+
+  if (inv.phones && inv.phones.length && mobCol > -1) {
     for (i = 0; i < rows.length; i++) {
-      var full = String(rows[i][nameCol] || '').replace(/^(mr|mrs|ms|miss|mx|dr|prof)\.?\s+/i, '').trim();
-      if (full.length < 5) continue;                       /* too short to be safe */
-      if (inv.name && full.toLowerCase() === inv.name.toLowerCase()) return i;
-      if (inv.hay.toLowerCase().indexOf(full.toLowerCase()) > -1) return i;
+      var rowNum = digits_(rows[i][mobCol]);
+      if (rowNum.length < 9) continue;                  /* too short to trust */
+      for (var p = 0; p < inv.phones.length; p++) {
+        if (digits_(inv.phones[p]) === rowNum) return { i: i, how: 'phone' };
+      }
     }
   }
-  return -1;
+
+  var want = normName_(inv.name);
+  if (want && nameCol > -1) {
+    var wantIS = initialSurname_(want);
+    for (i = 0; i < rows.length; i++) {
+      var got = normName_(rows[i][nameCol]);
+      if (!got) continue;
+      if (got === want) return { i: i, how: 'name' };
+    }
+    if (wantIS) {
+      for (i = 0; i < rows.length; i++) {
+        var gotIS = initialSurname_(normName_(rows[i][nameCol]));
+        if (gotIS && gotIS === wantIS) return { i: i, how: 'surname' };
+      }
+    }
+    /* A single word is not enough on its own - record it and move on. */
+    if (want.indexOf(' ') < 0) {
+      for (i = 0; i < rows.length; i++) {
+        var first = normName_(rows[i][nameCol]).split(' ')[0];
+        if (first && first === want) near.push(String(rows[i][nameCol]));
+      }
+    }
+  }
+
+  if (nameCol > -1) {
+    for (i = 0; i < rows.length; i++) {
+      var full = normName_(rows[i][nameCol]);
+      if (full.length < 8 || full.indexOf(' ') < 0) continue;   /* needs to be a real full name */
+      if (inv.hay.toLowerCase().indexOf(full) > -1) return { i: i, how: 'inbody' };
+    }
+  }
+
+  return { i: -1, how: '', near: near };
 }
 
 /** How many days ago was this? */
