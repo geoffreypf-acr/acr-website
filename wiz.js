@@ -125,6 +125,11 @@
         if (!el.value.trim()) { showErr('Please add ' + (el.getAttribute('data-label') || 'this field') + '.', el); return false; }
         if (el.getAttribute('data-field') === 'email' && !validEmail(el.value)) { showErr('Please enter a valid email address.', el); return false; }
         if (el.getAttribute('data-field') === 'year' && !/^(19|20)\d{2}$/.test(el.value.trim())) { showErr('Please enter a valid 4-digit year, e.g. 2021.', el); return false; }
+        /* Title, first name and surname are all required — see form.js for why. */
+        if (el.getAttribute('data-field') === 'name'
+            && !/^[a-z\u00c0-\u024f''.-]{2,}(?:\s+[a-z\u00c0-\u024f''.-]{1,}\.?)*\s+[a-z\u00c0-\u024f''.-]{2,}$/i.test(el.value.trim().replace(/\s+/g, ' '))) {
+          showErr('Please add both a first name and a surname.', el); return false;
+        }
       }
       return true;
     }

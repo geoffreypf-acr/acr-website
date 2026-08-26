@@ -88,6 +88,34 @@
     return (v && name && name !== '—') ? v + ' ' + name : name;
   }
 
+  /* Title, first name and surname are all required. One-word names left us with
+     no way to address anyone properly in a written quote, and the CRM's greeting
+     needs a surname to go with the title. Accented letters, hyphens, apostrophes
+     and initials all pass; a single word does not. */
+  var NAME_RE = /^[a-z\u00c0-\u024f''.-]{2,}(?:\s+[a-z\u00c0-\u024f''.-]{1,}\.?)*\s+[a-z\u00c0-\u024f''.-]{2,}$/i;
+  function badTitle(form) {
+    var t = form && form.querySelector('[data-title]');
+    if (!t) return '';
+    return (t.value || '').trim() ? '' : 'Please choose a title \u2014 Mr, Mrs, Ms, Miss and so on.';
+  }
+  function badName(v) {
+    v = (v || '').trim().replace(/\s+/g, ' ');
+    if (!v) return 'Please add your first name and surname.';
+    if (!NAME_RE.test(v)) return 'Please add both a first name and a surname.';
+    return '';
+  }
+
+  /* Every form puts the title select and the name input inside .name-row, so one
+     check covers all of them. */
+  function badPerson(form) {
+    var t = badTitle(form);
+    if (t) return { msg: t, el: form.querySelector('[data-title]') };
+    var el = form.querySelector('.name-row input');
+    if (!el) return null;
+    var n = badName(el.value);
+    return n ? { msg: n, el: el } : null;
+  }
+
   /* Every form now requires an email address. A mobile alone left us unable to
      send a written quote, and phone tag is where enquiries went quiet. */
   var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -366,6 +394,9 @@
       ev.preventDefault();
       clearError();
 
+      var bad = badPerson(form);
+      if (bad) { showError(bad.msg, bad.el); return; }
+
       var controls = form.querySelectorAll('input, select, textarea');
       var lines = [], fields = {}, filledCount = 0, hasContact = false, firstEmpty = null;
 
@@ -595,6 +626,8 @@
          asked for here as well as in the wizard. */
       if (!yr) { derr('Please add the vehicle year.', dy); return; }
       if (!/^(19|20)\d{2}$/.test(yr)) { derr('Please enter a valid 4-digit year, e.g. 2021.', dy); return; }
+      var pBad = badPerson(form);
+      if (pBad) { derr(pBad.msg, pBad.el); return; }
       var eBad = badEmail(email);
       if (eBad) { derr(eBad, de); return; }
       var live = (liveCb && !liveCb.disabled && liveCb.checked) ? 'Yes' : 'No';
@@ -675,7 +708,8 @@
       var pe = document.getElementById('cErr'); if (pe) pe.remove();
       var name = withTitle(form, V('cc-name')), tel = V('cc-tel'), email = V('cc-email');
       var svcs = Array.prototype.slice.call(form.querySelectorAll('input[name="cservice"]:checked')).map(function (c) { return c.value; });
-      if (!name) { cerr('Please add your name.', document.getElementById('cc-name')); return; }
+      var pBad = badPerson(form);
+      if (pBad) { cerr(pBad.msg, pBad.el); return; }
       var eBad = badEmail(email);
       if (eBad) { cerr(eBad, document.getElementById('cc-email')); return; }
       if (!svcs.length) { cerr('Please select at least one service.'); return; }
@@ -722,7 +756,8 @@
       var name=withTitle(form, V('bt-name')), tel=V('bt-tel'), email=V('bt-email');
       var svcs=Array.prototype.slice.call(form.querySelectorAll('input[name="bservice"]:checked')).map(function(c){return c.value;});
       var urg=(form.querySelector('input[name="burgency"]:checked')||{}).value||'\u2014';
-      if(!name){ berr('Please add your name.', document.getElementById('bt-name')); return; }
+      var pBad = badPerson(form);
+      if (pBad) { berr(pBad.msg, pBad.el); return; }
       var eBad = badEmail(email);
       if (eBad) { berr(eBad, document.getElementById('bt-email')); return; }
       var via=selVia();
@@ -766,7 +801,8 @@
       var pe=document.getElementById('bmwErr'); if(pe)pe.remove();
       var name=withTitle(form, V('bm-name')), tel=V('bm-tel'), email=V('bm-email');
       var issues=Array.prototype.slice.call(form.querySelectorAll('input[name="bmissue"]:checked')).map(function(c){return c.value;});
-      if(!name){ berr('Please add your name.', document.getElementById('bm-name')); return; }
+      var pBad = badPerson(form);
+      if (pBad) { berr(pBad.msg, pBad.el); return; }
       var eBad = badEmail(email);
       if (eBad) { berr(eBad, document.getElementById('bm-email')); return; }
       var via=selVia();
@@ -831,6 +867,8 @@
         ev.preventDefault();
         var pe = document.getElementById(cfg.form + 'Err'); if (pe) pe.remove();
         form.querySelectorAll('input,select').forEach(function (el) { el.style.borderColor = ''; });
+        var pBad = badPerson(form);
+        if (pBad) { err(pBad.msg, pBad.el && pBad.el.id); return; }
         for (var i = 0; i < cfg.required.length; i++) {
           if (!V(cfg.required[i][0])) { err('Please add ' + cfg.required[i][1] + '.', cfg.required[i][0]); return; }
         }
