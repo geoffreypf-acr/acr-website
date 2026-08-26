@@ -76,33 +76,33 @@
       }).catch(function () {});
     } catch (e) {}
   }
-  /* Title — Mr / Mrs / Ms / Miss / Mx / Dr / Prof.
-     Kept together with the name rather than sent as a line of its own, so the
-     CRM's name column and the WhatsApp message both read "Mr Alex Marin" and no
-     sheet column had to be added. Optional everywhere: plenty of people would
-     rather not say, and it is never worth losing an enquiry over. */
-  function withTitle(form, name) {
-    var t = form && form.querySelector('[data-title]');
-    var v = t ? (t.value || '').trim() : '';
-    name = (name || '').trim();
-    return (v && name && name !== '—') ? v + ' ' + name : name;
+  /* One name, assembled from the three fields every form now has: a title, a
+     first name and a surname. It travels as a single "Mr Alex Marin" so the CRM's
+     name column and the WhatsApp message read the same, and no sheet column had
+     to be added. */
+  function personName(form) {
+    if (!form) return '';
+    var pick = function (sel) { var el = form.querySelector(sel); return el ? (el.value || '').trim() : ''; };
+    return [pick('[data-title]'), pick('.name-row input'), pick('[data-surname]')]
+             .filter(Boolean).join(' ');
   }
 
-  /* Title, first name and surname are all required. One-word names left us with
-     no way to address anyone properly in a written quote, and the CRM's greeting
-     needs a surname to go with the title. Accented letters, hyphens, apostrophes
-     and initials all pass; a single word does not. */
-  var NAME_RE = /^[a-z\u00c0-\u024f''.-]{2,}(?:\s+[a-z\u00c0-\u024f''.-]{1,}\.?)*\s+[a-z\u00c0-\u024f''.-]{2,}$/i;
+  /* Title, first name and surname are all required. Accented letters, hyphens
+     and apostrophes pass; a blank or a stray initial does not. */
+  /* Deliberately permissive: compound first names ("Mary Jane", "Anne-Marie"),
+     apostrophes and accents all have to pass. It only rejects blanks, digits and
+     a single stray letter. */
+  function badPart(v, what) {
+    v = (v || '').trim();
+    if (!v) return 'Please add your ' + what + '.';
+    if (/\d/.test(v)) return 'Please check the ' + what + ' \u2014 it should not contain numbers.';
+    if (v.replace(/[^a-z\u00c0-\u024f]/gi, '').length < 2) return 'Please check the ' + what + ' \u2014 it looks incomplete.';
+    return '';
+  }
   function badTitle(form) {
     var t = form && form.querySelector('[data-title]');
     if (!t) return '';
     return (t.value || '').trim() ? '' : 'Please choose a title \u2014 Mr, Mrs, Ms, Miss and so on.';
-  }
-  function badName(v) {
-    v = (v || '').trim().replace(/\s+/g, ' ');
-    if (!v) return 'Please add your first name and surname.';
-    if (!NAME_RE.test(v)) return 'Please add both a first name and a surname.';
-    return '';
   }
 
   /* Every form puts the title select and the name input inside .name-row, so one
@@ -110,10 +110,17 @@
   function badPerson(form) {
     var t = badTitle(form);
     if (t) return { msg: t, el: form.querySelector('[data-title]') };
-    var el = form.querySelector('.name-row input');
-    if (!el) return null;
-    var n = badName(el.value);
-    return n ? { msg: n, el: el } : null;
+    var checks = [
+      ['.name-row input', 'first name'],
+      ['[data-surname]',  'surname']
+    ];
+    for (var i = 0; i < checks.length; i++) {
+      var el = form.querySelector(checks[i][0]);
+      if (!el) continue;
+      var bad = badPart(el.value, checks[i][1]);
+      if (bad) return { msg: bad, el: el };
+    }
+    return null;
   }
 
   /* Every form now requires an email address. A mobile alone left us unable to
@@ -401,14 +408,15 @@
       var lines = [], fields = {}, filledCount = 0, hasContact = false, firstEmpty = null;
 
       var titleEl = form.querySelector('[data-title]');
+      var surEl = form.querySelector('[data-surname]');
       controls.forEach(function (el) {
         if (el.name === 'via' || el.type === 'checkbox' || el.type === 'hidden') return; // toggle / honeypot
-        if (el === titleEl) return;                    // merged into the name below
+        if (el === titleEl || el === surEl) return;    // merged into the name below
         var val = (el.value || '').trim();
         if (!val) { if (!firstEmpty) firstEmpty = el; return; }
         filledCount++;
         var label = labelFor(el);
-        if (/^(name|full name|your name|contact name)$/i.test(label)) val = withTitle(form, val);
+        if (/^(name|full name|first name|your name|contact name)$/i.test(label)) { label = 'Name'; val = personName(form); }
         if (el.type === 'email' || el.type === 'tel' || /mail|mobile|phone/i.test(label)) {
           hasContact = true;
         }
@@ -461,12 +469,11 @@
          that same row and sends the one email, so a single enquiry stays a
          single entry in the CRM and a single message in the inbox. */
       if (toDashCam()) {
-        var ttl = titleEl ? (titleEl.value || '').trim() : '';
-        var bare = fields['Name'] || '';
-        if (ttl && bare.indexOf(ttl + ' ') === 0) bare = bare.slice(ttl.length + 1);
+        var pick = function (sel) { var el = form.querySelector(sel); return el ? (el.value || '').trim() : ''; };
         var hq = new URLSearchParams();
         var carry = {
-          name: bare, title: ttl, email: fields['Email'], mobile: fields['Mobile'],
+          title: pick('[data-title]'), first: pick('.name-row input'), surname: pick('[data-surname]'),
+          email: fields['Email'], mobile: fields['Mobile'],
           postcode: fields['Postcode'], make: fields['Make'], model: fields['Model'],
           year: fields['Year'], via: via, key: crmKey,
           also: interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ')
@@ -509,6 +516,7 @@
     var dmd = document.getElementById('dmd');
     var dy  = document.getElementById('dy');
     var dn  = document.getElementById('dn');
+    var dsur = document.getElementById('dsur');
     var de  = document.getElementById('de');
     var dt  = document.getElementById('dt');
     var dpc = document.getElementById('dpc');
@@ -525,7 +533,8 @@
       try { q = new URLSearchParams(raw); } catch (e) { return; }
       var set = function (el, v) { if (el && v && !el.value) el.value = v; };
       set(dmk, q.get('make')); set(dmd, q.get('model')); set(dy, q.get('year'));
-      set(dn, q.get('name'));   set(de, q.get('email'));
+      set(dn, q.get('first') || q.get('name'));  set(dsur, q.get('surname'));
+      set(de, q.get('email'));
       set(dt, q.get('mobile')); set(dpc, q.get('postcode'));
       var tEl = form.querySelector('[data-title]');
       if (tEl && q.get('title') && !tEl.value) tEl.value = q.get('title');
@@ -536,7 +545,7 @@
         var r = form.querySelector('input[name="dvia"][value="' + viaWanted + '"]');
         if (r) r.checked = true;
       }
-      if (!q.get('make') && !q.get('name')) return;
+      if (!q.get('make') && !q.get('first') && !q.get('name')) return;
       var note = document.createElement('div');
       note.className = 'cfg-prefill';
       note.style.cssText = 'margin:0 0 18px;padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.5;'
@@ -635,7 +644,7 @@
          reach them, the vehicle, then what they want \u2014 so an enquiry that came
          through both forms reads identically. */
       var fields = {
-        Name: withTitle(form, (dn && dn.value || '').trim()) || '\u2014',
+        Name: personName(form) || '\u2014',
         Email: email, Mobile: mob || '\u2014',
         Postcode: (dpc && dpc.value || '').trim() || '\u2014',
         Make: mk, Model: (dmd && dmd.value || '').trim() || '\u2014', Year: yr,
@@ -706,7 +715,7 @@
     btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       var pe = document.getElementById('cErr'); if (pe) pe.remove();
-      var name = withTitle(form, V('cc-name')), tel = V('cc-tel'), email = V('cc-email');
+      var name = personName(form), tel = V('cc-tel'), email = V('cc-email');
       var svcs = Array.prototype.slice.call(form.querySelectorAll('input[name="cservice"]:checked')).map(function (c) { return c.value; });
       var pBad = badPerson(form);
       if (pBad) { cerr(pBad.msg, pBad.el); return; }
@@ -753,7 +762,7 @@
     btn.addEventListener('click', function(ev){
       ev.preventDefault();
       var pe=document.getElementById('batErr'); if(pe)pe.remove();
-      var name=withTitle(form, V('bt-name')), tel=V('bt-tel'), email=V('bt-email');
+      var name=personName(form), tel=V('bt-tel'), email=V('bt-email');
       var svcs=Array.prototype.slice.call(form.querySelectorAll('input[name="bservice"]:checked')).map(function(c){return c.value;});
       var urg=(form.querySelector('input[name="burgency"]:checked')||{}).value||'\u2014';
       var pBad = badPerson(form);
@@ -799,7 +808,7 @@
     btn.addEventListener('click', function(ev){
       ev.preventDefault();
       var pe=document.getElementById('bmwErr'); if(pe)pe.remove();
-      var name=withTitle(form, V('bm-name')), tel=V('bm-tel'), email=V('bm-email');
+      var name=personName(form), tel=V('bm-tel'), email=V('bm-email');
       var issues=Array.prototype.slice.call(form.querySelectorAll('input[name="bmissue"]:checked')).map(function(c){return c.value;});
       var pBad = badPerson(form);
       if (pBad) { berr(pBad.msg, pBad.el); return; }
@@ -877,7 +886,7 @@
         if (emBad) { err(emBad, cfg.emailId); return; }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
-        if (fields['Name']) fields['Name'] = withTitle(form, fields['Name']);
+        if (fields['Name']) fields['Name'] = personName(form) || fields['Name'];
         if (cfg.checkboxes) {
           var picked = Array.prototype.slice.call(form.querySelectorAll('input[name="' + cfg.checkboxes[0] + '"]:checked')).map(function (c) { return c.value; });
           if (!picked.length) { err('Please choose at least one option.'); return; }

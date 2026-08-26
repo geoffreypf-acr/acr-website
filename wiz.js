@@ -125,10 +125,12 @@
         if (!el.value.trim()) { showErr('Please add ' + (el.getAttribute('data-label') || 'this field') + '.', el); return false; }
         if (el.getAttribute('data-field') === 'email' && !validEmail(el.value)) { showErr('Please enter a valid email address.', el); return false; }
         if (el.getAttribute('data-field') === 'year' && !/^(19|20)\d{2}$/.test(el.value.trim())) { showErr('Please enter a valid 4-digit year, e.g. 2021.', el); return false; }
-        /* Title, first name and surname are all required — see form.js for why. */
-        if (el.getAttribute('data-field') === 'name'
-            && !/^[a-z\u00c0-\u024f''.-]{2,}(?:\s+[a-z\u00c0-\u024f''.-]{1,}\.?)*\s+[a-z\u00c0-\u024f''.-]{2,}$/i.test(el.value.trim().replace(/\s+/g, ' '))) {
-          showErr('Please add both a first name and a surname.', el); return false;
+        /* Title, first name and surname are separate [data-req] fields now, so the
+           blank check above covers them; this just catches a stray initial. */
+        if (/^(name|surname)$/.test(el.getAttribute('data-field') || '')
+            && (/\d/.test(el.value) || el.value.replace(/[^a-z\u00c0-\u024f]/gi, '').length < 2)) {
+          showErr('Please check the ' + (el.getAttribute('data-field') === 'name' ? 'first name' : 'surname')
+                  + ' \u2014 it looks incomplete.', el); return false;
         }
       }
       return true;
@@ -161,7 +163,8 @@
     /* Title (Mr / Mrs / Ms / Miss …) travels with the name, so the CRM's name
        column and the WhatsApp message both read "Mr Alex Marin". Optional. */
     function titleVal() { var t = form.querySelector('[data-title]'); return t ? (t.value || '').trim() : ''; }
-    function fullName() { var v = titleVal(), n = get('name'); return (v && n) ? v + ' ' + n : n; }
+    /* Title + first name + surname, as one value - see form.js for why. */
+    function fullName() { return [titleVal(), get('name'), get('surname')].filter(Boolean).join(' '); }
 
     function emailBackup(d) {
       try {
@@ -216,7 +219,7 @@
       if (toDashCam()) {
         /* name and title travel apart, so the dash cam form can prefill its own
            title picker instead of ending up with "Mr Mr Alex Marin". */
-        var q = { name: get('name'), title: titleVal(), email: d.Email, mobile: d.Mobile,
+        var q = { title: titleVal(), first: get('name'), surname: get('surname'), email: d.Email, mobile: d.Mobile,
                   postcode: d.Postcode, make: d.Make, model: d.Model, year: d.Year,
                   via: via(), key: crmKey };
         var also = interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ');
