@@ -172,6 +172,18 @@
     font-family: var(--font-display); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0; }
   .tabs button.on .n { background: rgba(6,33,44,.22); color: #06212C; }
   .tabs button .n.zero { opacity: .45; font-weight: 600; }
+  /* Channel filter — how the enquiry reached us, or how to reply. Smaller than
+     the stage tabs so it reads as a refinement of them, not a second set. */
+  .chans { display: flex; gap: 7px; overflow-x: auto; margin: -8px 0 16px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .chans button { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px;
+    border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-secondary);
+    font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chans button:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .chans button.on { background: var(--accent-soft); border-color: var(--signal-500); color: var(--text-primary); }
+  .chans button .n { font-weight: 700; opacity: .75; font-size: 12px; }
+  .chans button.on .n { opacity: 1; }
+  .chans .ch-lab { align-self: center; flex: none; font-size: 12px; color: var(--text-muted); padding-right: 2px; }
+  @media (max-width: 720px) { .chans { gap: 6px; } .chans button { padding: 7px 11px; font-size: 12.5px; } .chans .ch-lab { display: none; } }
   @media (max-width: 720px) {
     .tabs { gap: 6px; margin-bottom: 14px; }
     .tabs button { padding: 10px 14px; font-size: 13.5px; gap: 8px; }
@@ -272,6 +284,7 @@
 
   <div class="banner" id="banner"></div>
   <div class="tabs" id="tabs"></div>
+  <div class="chans" id="chans"></div>
 
   <div class="dash" id="dash" hidden>
     <label class="dash-opt"><input type="checkbox" id="dashArch"> Include archived</label>
@@ -415,6 +428,31 @@ window.__crmStart = function(){
     for(var i=0;i<CATS.length;i++){ if(CATS[i][1].test(hay)) return CATS[i][0]; }
     return 'Other';
   }
+  /* Filter by how the enquiry reached us, or how they want to be answered.
+     A record can sit in more than one of these: a website form where they chose
+     WhatsApp is a WhatsApp lead, and an emailed enquiry is an Email lead whether
+     the Gmail sync imported it or they typed an address into a form. */
+  var CHANS = [
+    { key:'',         label:'All' },
+    { key:'call',     label:'Calls' },
+    { key:'whatsapp', label:'WhatsApp' },
+    { key:'email',    label:'Email' }
+  ];
+  var CHAN_KEY = 'acr_crm_chan';
+  function curChan(){
+    var v = localStorage.getItem(CHAN_KEY) || '';
+    return CHANS.some(function(c){ return c.key === v; }) ? v : '';
+  }
+  function matchChan(e, key){
+    if(!key) return true;
+    var pref = prefContact(e).toLowerCase();
+    var src  = (e.source||'').toLowerCase();
+    if(key === 'call')     return isCall(e) || src === 'phone' || pref === 'phone';
+    if(key === 'whatsapp') return pref === 'whatsapp';
+    if(key === 'email')    return src === 'gmail' || pref === 'email' || (!!(e.email||'').toString().trim() && !pref);
+    return true;
+  }
+
   /* How the enquiry reached us. */
   function channelOf(e){
     var src=(e.source||'').toLowerCase();
@@ -782,6 +820,28 @@ window.__crmStart = function(){
     });
   }
 
+  function renderChans(){
+    var el=$('chans'); if(!el) return;
+    var g = groupOf(curTab());
+    /* Counts respect the stage tab you are on, so they match what the board
+       would show rather than the whole sheet. */
+    var live = data.filter(function(e){
+      return !isDeleted(e) && (!g.stages || g.stages.indexOf(statusOf(e))>-1);
+    });
+    var cur = curChan();
+    el.innerHTML = '<span class="ch-lab">Channel</span>' + CHANS.map(function(c){
+      var n = live.filter(function(e){ return matchChan(e, c.key); }).length;
+      return '<button type="button" data-chan="'+c.key+'"'+(cur===c.key?' class="on"':'')+'>'
+           +   esc(c.label)+'<span class="n">'+n+'</span></button>';
+    }).join('');
+    el.querySelectorAll('button[data-chan]').forEach(function(b){
+      b.addEventListener('click', function(){
+        localStorage.setItem(CHAN_KEY, b.getAttribute('data-chan'));
+        render();
+      });
+    });
+  }
+
   /* Which stage columns are collapsed. Remembered per device. */
   var CLOSED_KEY='acr_crm_closed';
   function closedSet(){
@@ -804,12 +864,14 @@ window.__crmStart = function(){
 
   function render(){
     var q = ($('search').value||'').toLowerCase().trim();
+    var chan = curChan();
     var board = $('board'); board.innerHTML='';
     var due = 0;
     var g = groupOf(curTab());
     var shown = STAGES.filter(function(st){ return !g.stages || g.stages.indexOf(st.key)>-1; });
     shown.forEach(function(s){
       var items = data.filter(function(e){ return !isDeleted(e) && statusOf(e)===s.key; })
+        .filter(function(e){ return matchChan(e, chan); })
         .filter(function(e){ if(!q) return true; return (e.name+' '+vehicle(e)+' '+serviceOf(e)+' '+(e.email||'')).toLowerCase().indexOf(q)>-1; })
         .sort(function(a,b){ return new Date(b.timestamp||0)-new Date(a.timestamp||0); });
       var sum = items.reduce(function(t,e){ return t+valNum(e); },0);
@@ -856,6 +918,7 @@ window.__crmStart = function(){
     });
     var pill=$('fuPill'); pill.textContent = due+' follow-up'+(due===1?'':'s')+' due'; pill.className='pill'+(due?'':' zero');
     renderTabs();
+    renderChans();
     renderDash();
   }
 
@@ -866,8 +929,9 @@ window.__crmStart = function(){
     if(!btn||!box) return;
     function apply(on){
       box.hidden = !on;
-      var tabs=$('tabs'), board=$('board');
+      var tabs=$('tabs'), board=$('board'), chans=$('chans');
       if(tabs)  tabs.hidden  = on;
+      if(chans) chans.hidden = on;
       if(board) board.hidden = on;
       btn.classList.toggle('primary', on);
       btn.textContent = on ? '\u2190 Pipeline' : 'Dashboard';
