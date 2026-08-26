@@ -483,6 +483,7 @@ function tideInvoices_(dryRun) {
   var nameCol = headers.indexOf('name');
   var mailCol = headers.indexOf('email');
   var mobCol  = headers.indexOf('mobile');
+  var valCol  = headers.indexOf('value');
 
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) { Logger.log('No enquiries to match against.'); return 0; }
@@ -494,7 +495,7 @@ function tideInvoices_(dryRun) {
   if (!threads.length) { Logger.log('No Tide mail in the last %s days. Query: %s', CFG.TIDE_DAYS, query); return 0; }
   var bulk = GmailApp.getMessagesForThreads(threads);
 
-  var attached = 0, unmatched = [], skipped = 0, shown = 0, seenRef = {}, cancelled = [], created = 0, newRows = [];
+  var attached = 0, unmatched = [], skipped = 0, shown = 0, seenRef = {}, cancelled = [], created = 0, newRows = [], newKeys = {};
 
   threads.forEach(function (thread, idx) {
     var msgs = bulk[idx] || thread.getMessages();
@@ -545,6 +546,17 @@ function tideInvoices_(dryRun) {
       /* An invoice with no record means a paying customer who is not on the board
          at all. Optionally put them there rather than losing them. */
       if (CFG.TIDE_CREATE_MISSING && (inv.email || inv.name)) {
+        /* Same customer, second invoice: note it on the record we are already
+           creating rather than creating them twice. Newest invoice wins the row
+           because threads arrive newest first. */
+        var key = (inv.email || normName_(inv.name));
+        if (newKeys[key] !== undefined) {
+          var prev = newRows[newKeys[key]];
+          prev.details = prev.details + ' | also ' + (inv.ref || 'another invoice')
+                       + (inv.total ? ' ' + inv.total : '');
+          return;
+        }
+        newKeys[key] = newRows.length;
         newRows.push({
           timestamp:      msg.getDate().toISOString(),
           name:           inv.name || inv.email,
@@ -575,6 +587,11 @@ function tideInvoices_(dryRun) {
     }
     if (refCol  > -1) sheet.getRange(hit + 2, refCol + 1).setValue(inv.ref || '');
     if (linkCol > -1) sheet.getRange(hit + 2, linkCol + 1).setValue(link);
+    /* The invoice total is the value of the job, and the dashboard reads that
+       column. Only fill it when empty - never overwrite a figure set by hand. */
+    if (valCol > -1 && inv.total && !String(rows[hit][valCol] || '').trim()) {
+      sheet.getRange(hit + 2, valCol + 1).setValue(inv.total.replace(/[^\d.]/g, ''));
+    }
     if (CFG.TIDE_SET_STATUS && stCol > -1) {
       var cur = String(rows[hit][stCol] || '').trim();
       /* never drag a finished job backwards */
