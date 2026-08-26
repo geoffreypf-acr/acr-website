@@ -317,9 +317,9 @@ footer.ft { background: var(--navy-950); border-top: 1px solid var(--border-subt
 .wiz-step { animation: wizIn .26s var(--ease-out); }
 @keyframes wizIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 .wiz-step .form-grid { margin-top: 0; }
-.wiz-nav { display: flex; gap: 10px; margin-top: 20px; }
-.wiz-nav .btn { flex: 1; margin: 0; height: 50px; width: auto; }
-.wiz-nav [data-wiz-back] { flex: 0 0 auto; padding: 0 18px; }
+.wiz-nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.wiz-nav .btn { flex: 1; margin: 0; height: 50px; width: auto; min-width: 0; }
+.wiz-nav [data-wiz-back] { flex: 0 0 auto; padding: 0 18px; width: auto; }
 @media (prefers-reduced-motion: reduce) { .wiz-step { animation: none; } }
 
 /* Send-via segmented toggle */

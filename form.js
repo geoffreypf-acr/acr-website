@@ -546,12 +546,46 @@
         if (r) r.checked = true;
       }
       if (!q.get('make') && !q.get('first') && !q.get('name')) return;
+
+      /* The enquiry is already logged and on the board by the time they land
+         here, so say so and list back what we have. Without that, being asked
+         for the same details twice reads as though the first form did nothing.
+         Built with textContent rather than innerHTML: these values come from the
+         URL. */
       var note = document.createElement('div');
       note.className = 'cfg-prefill';
-      note.style.cssText = 'margin:0 0 18px;padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.5;'
+      note.style.cssText = 'margin:0 0 18px;padding:14px 16px;border-radius:10px;font-size:13.5px;line-height:1.55;'
         + 'background:var(--secure-soft,rgba(47,161,204,.08));border:1px solid rgba(47,161,204,.3);color:var(--text-secondary)';
-      note.textContent = 'Your details have carried over — just pick your camera and coverage below, then send.'
-        + (alsoWanted ? ' We’ll cover ' + alsoWanted + ' in the same reply.' : '');
+
+      var head = document.createElement('strong');
+      head.style.cssText = 'display:block;color:var(--text-primary);margin-bottom:6px';
+      head.textContent = 'Got it — your enquiry is already with us.';
+      note.appendChild(head);
+
+      var noted = [];
+      var who = [q.get('title'), q.get('first') || q.get('name'), q.get('surname')].filter(Boolean).join(' ');
+      var reach = [q.get('mobile'), q.get('email')].filter(Boolean).join(' · ');
+      if (who || reach) noted.push('Your details' + (who ? ' — ' + who : '') + (reach ? ' (' + reach + ')' : ''));
+      var veh = [q.get('make'), q.get('model'), q.get('year')].filter(Boolean).join(' ');
+      if (veh) noted.push('Your vehicle — ' + veh + (q.get('postcode') ? ', ' + q.get('postcode') : ''));
+      if (alsoWanted) noted.push('Also noted — ' + alsoWanted);
+
+      if (noted.length) {
+        var ul = document.createElement('ul');
+        ul.style.cssText = 'margin:0 0 8px;padding-left:18px';
+        noted.forEach(function (line) {
+          var li = document.createElement('li');
+          li.style.margin = '2px 0';
+          li.textContent = line;                     /* never innerHTML - URL data */
+          ul.appendChild(li);
+        });
+        note.appendChild(ul);
+      }
+
+      var ask = document.createElement('span');
+      ask.textContent = 'A dash cam quote needs two more answers — pick your camera and coverage below and send, '
+        + 'and we\u2019ll reply about ' + (alsoWanted ? 'all of it together.' : 'it the same day.');
+      note.appendChild(ask);
       form.parentNode.insertBefore(note, form);
       if (form.scrollIntoView) { try { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }
     })();
