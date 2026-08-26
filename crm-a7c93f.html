@@ -135,6 +135,8 @@
   .dactions a svg { width: 16px; height: 16px; }
   .dactions a.wa { color: #25D366; border-color: rgba(37,211,102,.4); }
   .dactions a.wa:hover { background: rgba(37,211,102,.12); }
+  .dactions a.gm { color: #E4756B; border-color: rgba(228,117,107,.4); }
+  .dactions a.gm:hover { background: rgba(228,117,107,.12); }
   /* Undo toast */
   .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 12px 14px 12px 18px; display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow-lg, 0 10px 40px rgba(0,0,0,.4)); z-index: 120; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
   .toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
@@ -441,6 +443,51 @@ window.__crmStart = function(){
          + '#Intent;scheme=smsto;package=com.whatsapp.w4b'
          + ';S.browser_fallback_url='+encodeURIComponent(web)+';end';
   }
+  /* iOS gives no documented way to pick WhatsApp Business over the personal app
+     - both claim the same whatsapp:// scheme and the same wa.me universal link.
+     So this ATTEMPTS the Business app's own scheme in a hidden iframe (an iframe
+     means no "address invalid" dialog if it isn't registered) and falls back to
+     wa.me shortly after if nothing took over. Worst case it behaves exactly as
+     it did before. Android is already handled by waLink()'s intent:// URL, which
+     names the package outright and is reliable. */
+  var IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent||'')
+             || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if(IS_IOS){
+    document.addEventListener('click', function(ev){
+      var a = ev.target && ev.target.closest ? ev.target.closest('a.wa') : null;
+      if(!a) return;
+      var web = a.getAttribute('href') || '';
+      if(web.indexOf('https://wa.me/') !== 0) return;
+      ev.preventDefault();
+      var deep = web.replace('https://wa.me/', 'whatsapp-smb://send?phone=')
+                    .replace('?text=', '&text=');
+      var fr = document.createElement('iframe');
+      fr.style.display = 'none'; fr.src = deep;
+      document.body.appendChild(fr);
+      var fall = setTimeout(function(){ window.location.href = web; }, 900);
+      var stop = function(){ if(document.hidden) clearTimeout(fall); };   /* app took over */
+      document.addEventListener('visibilitychange', stop, { once: true });
+      setTimeout(function(){ if(fr.parentNode) fr.parentNode.removeChild(fr); }, 1600);
+    }, true);
+  }
+
+  /* Reply from the ACR inbox, not whatever the device thinks is its mail app.
+     mailto: opens Apple Mail on a phone, which is signed in as the wrong
+     account; this opens Gmail's composer prefilled instead. Enquiries the Gmail
+     sync imported carry a threadId, so for those we can drop straight into the
+     existing conversation and keep the reply threaded. */
+  var GMAIL_USER = 0;            // the ACR account's index in Gmail (0 = first)
+  function gmailLink(to, subject, body){
+    return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/?view=cm&fs=1&tf=1'
+         + '&to=' + encodeURIComponent(to)
+         + '&su=' + encodeURIComponent(subject || '')
+         + '&body=' + encodeURIComponent(body || '');
+  }
+  function gmailThread(threadId){
+    return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/#all/'
+         + encodeURIComponent(String(threadId || '').trim());
+  }
+
   /* Unnamed callers are stored as "Missed call 07…" by the Gmail sync. */
   function nameOf(e){ return (e.name||'').toString().replace(/^missed call\b/i,'Call'); }
   function prefContact(e){ return (e.preferredReply||e.preferredreply||e.preferred||'').toString().trim(); }
@@ -843,13 +890,24 @@ window.__crmStart = function(){
     $('dInfo').innerHTML = info.join('<br>') || 'No contact details captured.';
     // Contact action buttons — tap to Call / Message (iMessage/SMS) / WhatsApp
     var act = $('dActions');
+    /* Enquiries the Gmail sync imported carry the conversation's threadId, so we
+       can jump straight into that thread rather than starting a new mail. */
+    var thread = (e.threadId||'').toString().trim();
+    var threadBtn = thread
+      ? '<a class="gm" href="'+gmailThread(thread)+'" target="_blank" rel="noopener">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>'
+        + '<path d="m22 7-10 6L2 7"/></svg>Gmail thread</a>'
+      : '';
     if(e.mobile){
       var digits = ukPhone(e.mobile).replace(/\D/g,''); // e.g. 447700900123
       act.style.display='flex';
       act.innerHTML =
         '<a href="tel:+'+digits+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8 9.6a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg>Call</a>'
       + '<a href="sms:+'+digits+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</a>'
-      + '<a class="wa" href="'+waLink(digits)+'" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.15-1.7-.84-2-.94-.26-.1-.46-.15-.65.15-.2.29-.74.94-.9 1.13-.17.2-.34.22-.63.08-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.64-2.05-.17-.3-.02-.46.13-.6.13-.14.3-.34.44-.51.15-.17.2-.29.3-.49.1-.2.05-.37-.02-.51-.08-.15-.65-1.57-.9-2.15-.24-.56-.48-.48-.65-.49h-.56c-.2 0-.5.07-.77.36-.26.29-1 1-1 2.42 0 1.43 1.03 2.8 1.17 3 .14.2 2.03 3.1 4.92 4.35.69.3 1.22.47 1.64.6.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.2-.55-.34zM12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2z"/></svg>WhatsApp</a>';
+      + '<a class="wa" href="'+waLink(digits)+'" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.15-1.7-.84-2-.94-.26-.1-.46-.15-.65.15-.2.29-.74.94-.9 1.13-.17.2-.34.22-.63.08-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.64-2.05-.17-.3-.02-.46.13-.6.13-.14.3-.34.44-.51.15-.17.2-.29.3-.49.1-.2.05-.37-.02-.51-.08-.15-.65-1.57-.9-2.15-.24-.56-.48-.48-.65-.49h-.56c-.2 0-.5.07-.77.36-.26.29-1 1-1 2.42 0 1.43 1.03 2.8 1.17 3 .14.2 2.03 3.1 4.92 4.35.69.3 1.22.47 1.64.6.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.36.24-.67.24-1.24.17-1.36-.07-.12-.26-.2-.55-.34zM12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2z"/></svg>WhatsApp</a>' + threadBtn;
+    } else if(threadBtn){
+      act.style.display='flex'; act.innerHTML = threadBtn;
     } else { act.style.display='none'; act.innerHTML=''; }
 
     /* ---- Quick message templates (follow-up / closing) ---- */
@@ -889,7 +947,8 @@ window.__crmStart = function(){
         html += '<div class="tpl-row"><span class="tpl-name">'+t.label+'</span>';
         if(digits) html += '<a class="wa" target="_blank" rel="noopener" href="'+waLink(digits, t.body)+'">WhatsApp</a>'
                         +  '<a href="sms:+'+digits+'&body='+encodeURIComponent(t.body)+'">SMS</a>';
-        if(mail)   html += '<a href="mailto:'+encodeURIComponent(mail)+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body)+'">Email</a>';
+        if(mail)   html += '<a class="gm" target="_blank" rel="noopener" href="'+gmailLink(mail, t.subject, t.body)+'">Gmail</a>'
+                        +  '<a href="mailto:'+encodeURIComponent(mail)+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body)+'">Email</a>';
         html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
       });
       box.innerHTML = html;
