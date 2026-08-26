@@ -443,30 +443,39 @@ window.__crmStart = function(){
          + '#Intent;scheme=smsto;package=com.whatsapp.w4b'
          + ';S.browser_fallback_url='+encodeURIComponent(web)+';end';
   }
-  /* iOS gives no documented way to pick WhatsApp Business over the personal app
-     - both claim the same whatsapp:// scheme and the same wa.me universal link.
-     So this ATTEMPTS the Business app's own scheme in a hidden iframe (an iframe
-     means no "address invalid" dialog if it isn't registered) and falls back to
-     wa.me shortly after if nothing took over. Worst case it behaves exactly as
-     it did before. Android is already handled by waLink()'s intent:// URL, which
-     names the package outright and is reliable. */
+  /* Open the real app, not a web page, when we are on a phone.
+     The pattern is the same for both: point the link at the app's own URL scheme
+     and fall back to the web address if nothing takes over. On iOS we have to do
+     it on click, through a hidden iframe - an iframe means no "address invalid"
+     dialog when the app is not installed. On Android the intent:// form carries
+     both the package name and the fallback, so the href alone is enough. */
   var IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent||'')
              || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function androidIntent(path, scheme, pkg, webUrl){
+    return 'intent://' + path + '#Intent;scheme=' + scheme + ';package=' + pkg
+         + ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+  }
   if(IS_IOS){
+    /* a.wa -> WhatsApp Business, a.gm[data-app] -> the Gmail app. */
     document.addEventListener('click', function(ev){
-      var a = ev.target && ev.target.closest ? ev.target.closest('a.wa') : null;
+      var a = ev.target && ev.target.closest ? ev.target.closest('a.wa, a.gm[data-app]') : null;
       if(!a) return;
-      var web = a.getAttribute('href') || '';
-      if(web.indexOf('https://wa.me/') !== 0) return;
+      var web = a.getAttribute('href') || '', deep = '';
+      if(a.classList.contains('wa')){
+        if(web.indexOf('https://wa.me/') !== 0) return;
+        deep = web.replace('https://wa.me/', 'whatsapp-smb://send?phone=').replace('?text=', '&text=');
+      } else {
+        deep = a.getAttribute('data-app') || '';
+      }
+      if(!deep) return;
       ev.preventDefault();
-      var deep = web.replace('https://wa.me/', 'whatsapp-smb://send?phone=')
-                    .replace('?text=', '&text=');
       var fr = document.createElement('iframe');
       fr.style.display = 'none'; fr.src = deep;
       document.body.appendChild(fr);
       var fall = setTimeout(function(){ window.location.href = web; }, 900);
-      var stop = function(){ if(document.hidden) clearTimeout(fall); };   /* app took over */
-      document.addEventListener('visibilitychange', stop, { once: true });
+      document.addEventListener('visibilitychange', function(){
+        if(document.hidden) clearTimeout(fall);       /* the app took over */
+      }, { once: true });
       setTimeout(function(){ if(fr.parentNode) fr.parentNode.removeChild(fr); }, 1600);
     }, true);
   }
@@ -477,11 +486,26 @@ window.__crmStart = function(){
      sync imported carry a threadId, so for those we can drop straight into the
      existing conversation and keep the reply threaded. */
   var GMAIL_USER = 0;            // the ACR account's index in Gmail (0 = first)
-  function gmailLink(to, subject, body){
+  function gmailWeb(to, subject, body){
     return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/?view=cm&fs=1&tf=1'
          + '&to=' + encodeURIComponent(to)
          + '&su=' + encodeURIComponent(subject || '')
          + '&body=' + encodeURIComponent(body || '');
+  }
+  /* The Gmail APP's own composer. Same query on both platforms - iOS reaches it
+     through googlegmail:///co, Android through the intent above. Desktop has no
+     app to open, so it keeps the web composer. */
+  function gmailApp(to, subject, body){
+    return 'co?to=' + encodeURIComponent(to)
+         + '&subject=' + encodeURIComponent(subject || '')
+         + '&body=' + encodeURIComponent(body || '');
+  }
+  /* Returns the href, plus the data-app attribute iOS needs, as one string. */
+  function gmailLink(to, subject, body){
+    var web = gmailWeb(to, subject, body), q = gmailApp(to, subject, body);
+    if(IS_ANDROID) return 'href="' + androidIntent(q, 'googlegmail', 'com.google.android.gm', web) + '"';
+    if(IS_IOS)     return 'href="' + web + '" data-app="googlegmail:///' + q + '"';
+    return 'href="' + web + '"';
   }
   function gmailThread(threadId){
     return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/#all/'
@@ -958,7 +982,7 @@ window.__crmStart = function(){
            by desktop mail clients, which is why the Email link worked on a phone
            and did nothing on a computer. Gmail is listed first because it works
            whether or not a mail client is set up on the machine. */
-        if(mail)   html += '<a class="gm" target="_blank" rel="noopener" href="'+gmailLink(mail, t.subject, t.body)+'">Gmail</a>'
+        if(mail)   html += '<a class="gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>'
                         +  '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body)+'">Mail app</a>';
         html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
       });
