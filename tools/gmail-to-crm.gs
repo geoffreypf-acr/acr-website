@@ -179,7 +179,7 @@ function removeGmailTrigger() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('ACR CRM')
-    .addItem('Sync now (email + missed calls)', 'syncAll')
+    .addItem('Sync now (email + calls + invoices)', 'syncAll')
     .addSeparator()
     .addItem('Dry run — email enquiries', 'dryRunGmailToCrm')
     .addItem('Dry run — missed calls', 'dryRunMissedCalls')
