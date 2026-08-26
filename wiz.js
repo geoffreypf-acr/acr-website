@@ -170,10 +170,11 @@
     }
 
     function sheetBackup(d) {
-      if (!SHEET_ENDPOINT) return;
+      if (!SHEET_ENDPOINT) return '';
+      var stamp = new Date().toISOString();
       try {
         var p = {
-          timestamp: new Date().toISOString(),
+          timestamp: stamp,
           name: d.Name || '', mobile: d.Mobile || '', email: d.Email || '', postcode: d.Postcode || '',
           make: d.Make || '', model: d.Model || '', year: d.Year || '', trim: d.Trim || '', fuel: d.Fuel || '', registration: d.Registration || '',
           interested: d['Interested in'] || '', service: d['Interested in'] || '', preferredReply: d['Preferred reply'] || '',
@@ -185,6 +186,7 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(p)
         }).catch(function () {});
       } catch (e) {}
+      return stamp;   // the CRM's row key, so a later step can complete this row
     }
 
     subBtn.addEventListener('click', function () {
@@ -199,17 +201,19 @@
       var lines = [];
       order.forEach(function (k) { if (d[k] && d[k] !== '—' || k === 'Interested in' || k === 'Preferred reply') lines.push(k + ': ' + d[k]); });
       var text = 'New enquiry from acrautomobile.com' + NL + NL + lines.join(NL);
-      emailBackup(d);
-      sheetBackup(d);
+      var crmKey = sheetBackup(d);
 
-      /* Dash cam: hand over to the configurator, details prefilled. The lead is
-         already logged and emailed above, so nothing is lost if they stop there.
-         Anything else they ticked travels with them and is included in the
-         message they send from the dash cam page. */
+      /* Dash cam: hand over to the configurator, details prefilled. The CRM row
+         above means the lead cannot be lost if they stop there; the configurator
+         completes that same row and sends the one email, so a single enquiry
+         stays a single CRM entry and a single message in the inbox. Anything
+         else they ticked travels with them. */
       if (toDashCam()) {
         /* name and title travel apart, so the dash cam form can prefill its own
            title picker instead of ending up with "Mr Mr Alex Marin". */
-        var q = { name: get('name'), title: titleVal(), contact: d.Mobile || d.Email, make: d.Make, model: d.Model, year: d.Year, via: via() };
+        var q = { name: get('name'), title: titleVal(), email: d.Email, mobile: d.Mobile,
+                  postcode: d.Postcode, make: d.Make, model: d.Model, year: d.Year,
+                  via: via(), key: crmKey };
         var also = interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ');
         if (also) q.also = also;
         var hp = new URLSearchParams();
@@ -217,6 +221,8 @@
         location.href = '/dash-camera-installation-london#' + hp.toString();
         return;
       }
+
+      emailBackup(d);   // only when this form is the end of the journey
 
       if (via() === 'whatsapp') window.open('https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
       var okMsg = ok && ok.querySelector('[data-ok-msg]');

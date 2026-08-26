@@ -59,6 +59,22 @@
         body: JSON.stringify(row)
       }).catch(function () {});
     } catch (e) {}
+    return row.timestamp;   // the CRM's row key, so a later step can enrich it
+  }
+
+  /* Fill in a row we already wrote rather than adding a second one for the same
+     enquiry. Used by the dash cam handoff: the first form logs the lead so it
+     cannot be lost, then the configurator completes that same row. Keys must be
+     sheet column names; Apps Script ignores anything it does not recognise. */
+  function crmUpdate(key, cols) {
+    if (!SHEET_ENDPOINT || !key) return;
+    try {
+      fetch(SHEET_ENDPOINT, {
+        method: 'POST', keepalive: true, mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'updateEnquiry', key: key, fields: cols })
+      }).catch(function () {});
+    } catch (e) {}
   }
   /* Title — Mr / Mrs / Ms / Miss / Mx / Dr / Prof.
      Kept together with the name rather than sent as a line of its own, so the
@@ -70,6 +86,16 @@
     var v = t ? (t.value || '').trim() : '';
     name = (name || '').trim();
     return (v && name && name !== '—') ? v + ' ' + name : name;
+  }
+
+  /* Every form now requires an email address. A mobile alone left us unable to
+     send a written quote, and phone tag is where enquiries went quiet. */
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  function badEmail(v) {
+    v = (v || '').trim();
+    if (!v) return 'Please add your email address so we can send your quote in writing.';
+    if (!EMAIL_RE.test(v)) return 'Please enter a valid email address.';
+    return '';
   }
 
   // Friendly labels for known field ids (falls back to the <label> text)
@@ -368,6 +394,11 @@
                   form.querySelector('input[type="tel"], input[type="email"]') || firstEmpty);
         return;
       }
+      var emEl = form.querySelector('input[type="email"]');
+      if (emEl) {
+        var emBad = badEmail(emEl.value);
+        if (emBad) { showError(emBad, emEl); return; }
+      }
 
       var interest = Array.prototype.slice.call(form.querySelectorAll('input[name="interest"]:checked')).map(function (c) { return c.value; });
       if (form.querySelector('input[name="interest"]') && !interest.length) {
@@ -392,19 +423,21 @@
       // service label identifies WHICH enquiry in the CRM: interests, else the form's eyebrow (e.g. "Apple CarPlay enquiry"), else a sensible default
       var ebEl = form.querySelector('.eyebrow');
       var svcLabel = fields['Interested in'] || (ebEl && ebEl.textContent.trim()) || 'Vehicle Security Assessment';
-      crmUpload(fields, svcLabel); // → CRM (Google Sheet)
+      var crmKey = crmUpload(fields, svcLabel); // → CRM (Google Sheet)
 
-      /* Dash cam: hand over with the details prefilled. The lead is logged above
-         and emailed here first, so nothing is lost if they stop on that page. */
+      /* Dash cam: hand over with the details prefilled. The row above means the
+         lead cannot be lost if they stop there; the configurator then completes
+         that same row and sends the one email, so a single enquiry stays a
+         single entry in the CRM and a single message in the inbox. */
       if (toDashCam()) {
-        emailBackup(fields, pageRef);
         var ttl = titleEl ? (titleEl.value || '').trim() : '';
         var bare = fields['Name'] || '';
         if (ttl && bare.indexOf(ttl + ' ') === 0) bare = bare.slice(ttl.length + 1);
         var hq = new URLSearchParams();
         var carry = {
-          name: bare, title: ttl, contact: fields['Mobile'] || fields['Email'],
-          make: fields['Make'], model: fields['Model'], year: fields['Year'], via: via,
+          name: bare, title: ttl, email: fields['Email'], mobile: fields['Mobile'],
+          postcode: fields['Postcode'], make: fields['Make'], model: fields['Model'],
+          year: fields['Year'], via: via, key: crmKey,
           also: interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ')
         };
         Object.keys(carry).forEach(function (k) { if (carry[k] && carry[k] !== '—') hq.set(k, carry[k]); });
@@ -445,13 +478,15 @@
     var dmd = document.getElementById('dmd');
     var dy  = document.getElementById('dy');
     var dn  = document.getElementById('dn');
+    var de  = document.getElementById('de');
     var dt  = document.getElementById('dt');
+    var dpc = document.getElementById('dpc');
 
     /* Arriving from the homepage wizard: it has already taken their details and
        logged the lead, and passes them here in the URL hash (never the query
        string, so nothing extra can be crawled or indexed). All they have left to
        do is pick the camera and coverage. */
-    var alsoWanted = '';
+    var alsoWanted = '', carriedKey = '';
     (function prefill() {
       var raw = (location.hash || '').replace(/^#/, '');
       if (!raw || raw.indexOf('=') === -1) return;
@@ -459,10 +494,12 @@
       try { q = new URLSearchParams(raw); } catch (e) { return; }
       var set = function (el, v) { if (el && v && !el.value) el.value = v; };
       set(dmk, q.get('make')); set(dmd, q.get('model')); set(dy, q.get('year'));
-      set(dn, q.get('name'));  set(dt, q.get('contact'));
+      set(dn, q.get('name'));   set(de, q.get('email'));
+      set(dt, q.get('mobile')); set(dpc, q.get('postcode'));
       var tEl = form.querySelector('[data-title]');
       if (tEl && q.get('title') && !tEl.value) tEl.value = q.get('title');
       alsoWanted = q.get('also') || '';
+      carriedKey = q.get('key') || '';
       var viaWanted = q.get('via');
       if (viaWanted) {
         var r = form.querySelector('input[name="dvia"][value="' + viaWanted + '"]');
@@ -547,7 +584,8 @@
       ev.preventDefault();
       var pe = document.getElementById('dashErr'); if (pe) pe.remove();
       var cam = get('cam'), cov = get('cov');
-      var contact = (dt && dt.value || '').trim();
+      var email = (de && de.value || '').trim();
+      var mob   = (dt && dt.value || '').trim();
       var mk = (dmk && dmk.value || '').trim();
       var yr = (dy && dy.value || '').trim();
       if (!cam) { derr('Please choose a camera \u2014 Q200 or U3000 PRO.'); return; }
@@ -557,22 +595,43 @@
          asked for here as well as in the wizard. */
       if (!yr) { derr('Please add the vehicle year.', dy); return; }
       if (!/^(19|20)\d{2}$/.test(yr)) { derr('Please enter a valid 4-digit year, e.g. 2021.', dy); return; }
-      if (!contact) { derr('Please add a mobile or email so we can reply.', dt); return; }
+      var eBad = badEmail(email);
+      if (eBad) { derr(eBad, de); return; }
       var live = (liveCb && !liveCb.disabled && liveCb.checked) ? 'Yes' : 'No';
+      /* Same order as the security assessment's message \u2014 who they are, how to
+         reach them, the vehicle, then what they want \u2014 so an enquiry that came
+         through both forms reads identically. */
       var fields = {
-        Camera: cam, Coverage: cov, 'External battery': get('bat') || 'None',
-        'Live remote view': live,
+        Name: withTitle(form, (dn && dn.value || '').trim()) || '\u2014',
+        Email: email, Mobile: mob || '\u2014',
+        Postcode: (dpc && dpc.value || '').trim() || '\u2014',
         Make: mk, Model: (dmd && dmd.value || '').trim() || '\u2014', Year: yr,
-        Name: withTitle(form, (dn && dn.value || '').trim()) || '\u2014', Contact: contact
+        Camera: cam, Coverage: cov, 'External battery': get('bat') || 'None',
+        'Live remote view': live
       };
-      /* Anything else they ticked on the homepage wizard before being sent here. */
+      /* Anything else they ticked on the form that sent them here. */
       if (alsoWanted) fields['Also interested in'] = alsoWanted;
       var lines = [];
       for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
       var text = 'New dash cam enquiry from acrautomobile.com\n\n' + lines.join('\n');
       fields['Preferred reply'] = dashVia() === 'whatsapp' ? 'WhatsApp' : 'Email';
-      crmUpload(fields, 'Dash Cam' + (fields.Camera ? ' \u2014 ' + fields.Camera : '')); // → CRM (Google Sheet)
-      emailCopy(fields);                          // ALWAYS send a silent email copy to ACR
+      var svc = 'Dash Cam' + (fields.Camera ? ' \u2014 ' + fields.Camera : '');
+      if (carriedKey) {
+        /* Complete the row the previous form already wrote \u2014 one enquiry, one CRM
+           entry. The camera spec has no columns of its own, so it goes into
+           details, where the CRM card shows it. */
+        crmUpdate(carriedKey, {
+          service: svc, email: email, mobile: mob,
+          postcode: (dpc && dpc.value || '').trim(),
+          make: mk, model: (dmd && dmd.value || '').trim(), year: yr,
+          preferredReply: fields['Preferred reply'],
+          details: ['Coverage: ' + cov, 'Battery: ' + (get('bat') || 'None'), 'Live view: ' + live]
+                     .concat(alsoWanted ? ['Also interested in: ' + alsoWanted] : []).join(' \u00b7 ')
+        });
+      } else {
+        crmUpload(fields, svc);                   // → CRM (Google Sheet)
+      }
+      emailCopy(fields);                          // the one email copy to ACR
       if (dashVia() === 'whatsapp') deliverWA(text); // + open WhatsApp prefilled when chosen
       form.style.display = 'none';
       if (ok) ok.style.display = 'block';
@@ -617,7 +676,8 @@
       var name = withTitle(form, V('cc-name')), tel = V('cc-tel'), email = V('cc-email');
       var svcs = Array.prototype.slice.call(form.querySelectorAll('input[name="cservice"]:checked')).map(function (c) { return c.value; });
       if (!name) { cerr('Please add your name.', document.getElementById('cc-name')); return; }
-      if (!tel && !email) { cerr('Please add a mobile or email so we can reply.', document.getElementById('cc-tel')); return; }
+      var eBad = badEmail(email);
+      if (eBad) { cerr(eBad, document.getElementById('cc-email')); return; }
       if (!svcs.length) { cerr('Please select at least one service.'); return; }
       var via = selVia();
       var fields = {
@@ -663,7 +723,8 @@
       var svcs=Array.prototype.slice.call(form.querySelectorAll('input[name="bservice"]:checked')).map(function(c){return c.value;});
       var urg=(form.querySelector('input[name="burgency"]:checked')||{}).value||'\u2014';
       if(!name){ berr('Please add your name.', document.getElementById('bt-name')); return; }
-      if(!tel && !email){ berr('Please add a mobile or email so we can reply.', document.getElementById('bt-tel')); return; }
+      var eBad = badEmail(email);
+      if (eBad) { berr(eBad, document.getElementById('bt-email')); return; }
       var via=selVia();
       var fields={
         Name:name, Mobile:tel||'\u2014', Email:email||'\u2014',
@@ -706,7 +767,8 @@
       var name=withTitle(form, V('bm-name')), tel=V('bm-tel'), email=V('bm-email');
       var issues=Array.prototype.slice.call(form.querySelectorAll('input[name="bmissue"]:checked')).map(function(c){return c.value;});
       if(!name){ berr('Please add your name.', document.getElementById('bm-name')); return; }
-      if(!tel && !email){ berr('Please add a mobile or email so we can reply.', document.getElementById('bm-tel')); return; }
+      var eBad = badEmail(email);
+      if (eBad) { berr(eBad, document.getElementById('bm-email')); return; }
       var via=selVia();
       var fields={
         Name:name, Mobile:tel||'\u2014', Email:email||'\u2014',
@@ -773,8 +835,8 @@
           if (!V(cfg.required[i][0])) { err('Please add ' + cfg.required[i][1] + '.', cfg.required[i][0]); return; }
         }
         var em = V(cfg.emailId);
-        if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { err('Please enter a valid email address.', cfg.emailId); return; }
-        if (!V(cfg.telId) && !em) { err('Please add a mobile or email so we can reply.', cfg.telId); return; }
+        var emBad = badEmail(em);
+        if (emBad) { err(emBad, cfg.emailId); return; }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
         if (fields['Name']) fields['Name'] = withTitle(form, fields['Name']);
