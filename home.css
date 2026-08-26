@@ -292,8 +292,13 @@ body.menu-open { overflow: hidden; }
 .gscore { display: inline-flex; align-items: center; gap: 16px; }
 a.gscore { text-decoration: none; cursor: pointer; transition: opacity .2s; }
 a.gscore:hover { opacity: .82; }
-a.hero-rating { cursor: pointer; text-decoration: none; }
-a.hero-rating:hover { border-color: var(--signal-500); }
+/* Two review sources side by side, so the badge holds a link each rather than
+   being one link overall — nested anchors are not valid HTML. */
+.hero-rating .rate-src { display: inline-flex; align-items: center; gap: 9px; color: inherit; text-decoration: none; border-radius: var(--radius-pill); }
+.hero-rating .rate-src:hover { color: var(--text-primary); }
+.hero-rating .rate-src:hover .tp-star svg { color: #00B67A; }
+.hero-rating .tp-star svg { width: 15px; height: 15px; color: #00B67A; }
+@media (max-width: 560px) { .hero-rating { flex-wrap: wrap; row-gap: 8px; } }
 .glogo { font-family: var(--font-display); font-weight: 400; font-size: 36px; letter-spacing: .01em; }
 .glogo .b{color:#4285F4}.glogo .r{color:#EA4335}.glogo .y{color:#FBBC05}.glogo .g{color:#34A853}
 .stars { display: inline-flex; gap: 3px; }
