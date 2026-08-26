@@ -97,7 +97,7 @@ var CFG = {
   TIDE_SET_STATUS: 'Invoice sent',   // set '' to leave the stage alone
   // Print subject / To: / what was parsed for each invoice email during a dry
   // run. Turn off once matching is behaving.
-  TIDE_DEBUG: true,
+  TIDE_DEBUG: false,                 // set true to print what each invoice parsed to
   TIDE_DEBUG_MAX: 12,                // don't flood the log
   // The dry run showed 52 invoiced customers with NO record on the board at all -
   // people who came by phone or WhatsApp and were invoiced without ever filling a
@@ -514,7 +514,10 @@ function tideInvoices_(dryRun) {
        number is the current one and later ones are history. */
     if (inv.ref && seenRef[inv.ref]) { skipped++; return; }
     if (inv.ref) seenRef[inv.ref] = true;
-    if (inv.cancelled) { cancelled.push(inv.ref || subject.slice(0, 40)); skipped++; return; }
+    if (inv.cancelled) {
+      cancelled.push((inv.ref || subject.slice(0, 30)) + (inv.name ? ' (' + inv.name + ')' : ''));
+      skipped++; return;
+    }
 
     var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
     var hit  = matchRow_(rows, inv, nameCol, mailCol);
