@@ -14,25 +14,33 @@
   html, body { max-width: 100%; overflow-x: hidden; }
   .bk-shell { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; min-width: 0; }
   .bk-head { display: flex; align-items: center; gap: 16px; padding: 22px 0 26px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 30px; flex-wrap: wrap; }
-  .bk-head > div { min-width: 0; }
-  .bk-head h1, .bk-head .sub { overflow-wrap: anywhere; }
+  /* flex: 1 1 240px, not min-width: 0 - a flex item that can shrink to nothing
+     never triggers the wrap, it just gets squeezed. And no overflow-wrap here:
+     with a narrow column that breaks the title mid-word ("BOOK ING CONS OLE"). */
+  .bk-head > div { flex: 1 1 240px; min-width: 200px; }
+  .bk-head h1 { overflow-wrap: normal; word-break: normal; }
   .bk-head img { height: 26px; }
   .bk-head .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--warn-400); border: 1px solid rgba(223,174,78,.35); background: var(--warn-soft); padding: 4px 10px; border-radius: 999px; }
   .bk-head h1 { font-family: var(--font-display); font-size: 30px; letter-spacing: .02em; margin: 0; font-weight: 400; }
   .bk-head .sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
-  .bk-grid { display: grid; grid-template-columns: 1.15fr .85fr; grid-template-areas: "form prev"; gap: 30px; align-items: start; }
+  /* auto-fit rather than a fixed two columns: the layout then collapses on the
+     space it actually has, not on what a media query was told the width is. A
+     phone in "Request Desktop Website" mode reports ~980px, which is how this
+     page ended up two columns on a handset. */
+  .bk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 30px; align-items: start; }
   .formCol { grid-area: form; }
-  .bk-preview { grid-area: prev; }
+
   .bk-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 24px; }
   .bk-card + .bk-card { margin-top: 22px; }
   .bk-card h3 { font-family: var(--font-display); font-weight: 400; font-size: 20px; letter-spacing: .02em; margin: 0 0 4px; }
   .bk-card .hint { color: var(--text-muted); font-size: 12.5px; margin: 0 0 18px; line-height: 1.5; }
-  .bk-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px 16px; }
+  .bk-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 15px 16px; }
   /* Title / first name / surname across the full width, so none is squashed. */
   /* Title / First name / Surname across the full width. The selector is
      .bk-fields .bk-name, not .bk-name: on one class it tied with .field, which is
      declared later and set display:flex, so the grid never applied at all. */
-  .bk-fields .bk-name { grid-column: 1 / -1; display: grid; grid-template-columns: 104px 1fr 1fr;
+  .bk-fields .bk-name { grid-column: 1 / -1; display: grid;
+    grid-template-columns: minmax(88px, 104px) repeat(auto-fit, minmax(min(100%, 130px), 1fr));
     gap: 12px; align-items: end; min-width: 0; }
   .bk-fields .bk-name > .field { min-width: 0; }
   @media (max-width: 700px) { .bk-fields .bk-name { grid-template-columns: 1fr; } }
@@ -76,7 +84,7 @@
   .empty-rows { color: var(--text-muted); font-size: 13px; font-style: italic; padding: 8px 0; }
   .note { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 14px 0 0; }
   .note a { color: var(--signal-300); }
-  @media (max-width: 900px) { .bk-grid { display: flex; flex-direction: column; } .bk-preview { position: static; } .bk-fields { grid-template-columns: 1fr; } .formCol { order: 1; } .bk-preview { order: 2; } }
+  @media (max-width: 900px) { .bk-preview { position: static; } }
   .bk-card, .bk-fields, .formCol, .bk-preview { min-width: 0; }
   .bk-fields input, .bk-fields select, .bk-fields textarea { max-width: 100%; }
   @media (max-width: 620px) {
