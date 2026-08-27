@@ -32,7 +32,11 @@ function doPost(e) {
       var vals = sheet.getDataRange().getValues();
       var header = vals[0].map(function (h) { return String(h).trim(); });
       // make sure the CRM columns exist (added once, to the right)
-      ['status', 'value', 'followup', 'followups', 'owner', 'notes', 'deleted', 'category'].forEach(function (c) {
+      // 'updated' and 'chasedAt' are written by the CRM on every change and every
+      // chase. Apps Script only writes columns that exist, so they are listed here
+      // and created on first use - no hand-editing of the sheet header.
+      ['status', 'value', 'followup', 'followups', 'owner', 'notes', 'deleted', 'category',
+       'updated', 'chasedAt'].forEach(function (c) {
         if (header.indexOf(c) === -1) { header.push(c); sheet.getRange(1, header.length).setValue(c); }
       });
       var tsCol = header.indexOf('timestamp');
