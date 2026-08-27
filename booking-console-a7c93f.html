@@ -427,6 +427,34 @@
 
   function emailSubject(){ return 'Your '+BIZ.name+' booking — '+fmtDate(startDate())+' at '+fmtTime(startDate()); }
 
+  /* ---- Write back to the CRM ----------------------------------------------
+     Confirming a booking used to leave no trace on the board: the record stayed
+     at whatever stage it was on, so the pipeline could not tell you what was
+     actually in the diary. It now moves to Booked - or Deposit paid, if one is
+     recorded - and the appointment is written into the notes, against the exact
+     row the details came from. Only runs when a confirmation is actually sent. */
+  var crmKey = '';
+  function crmWriteBack(){
+    if(!SHEET_ENDPOINT || !crmKey) return false;
+    var when = fmtDate(startDate()) + ' at ' + fmtTime(startDate());
+    var line = 'Booked ' + when + ' — ' + serviceVal()
+             + (vehicle() ? ' (' + vehicle() + ')' : '')
+             + (val('price') ? ' — £' + val('price') : '')
+             + (val('deposit') ? ', £' + val('deposit') + ' deposit' : '')
+             + (val('invoice') ? ' — ' + val('invoice') : '');
+    var fields = { status: val('deposit') ? 'Deposit paid' : 'Booked', notes: line };
+    /* The agreed price is the value of the job, and the CRM reads that column for
+       its pipeline and Won figures. */
+    if(val('price')) fields.value = String(val('price')).replace(/[^\d.]/g, '');
+    if(val('invoice')) fields.invoiceRef = val('invoice');
+    try{
+      fetch(SHEET_ENDPOINT, {method:'POST', mode:'no-cors', keepalive:true,
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'updateEnquiry', key: crmKey, fields: fields })}).catch(function(){});
+      return true;
+    }catch(e){ return false; }
+  }
+
   // Send the confirmation email automatically via the Apps Script backend (bcc's you).
   function serverEmail(){
     if(!SHEET_ENDPOINT) return false;
@@ -447,11 +475,13 @@
     if(!num){ alert('Add the customer\u2019s mobile number first.'); return; }
     window.open('https://wa.me/'+num+'?text='+encodeURIComponent(emailBody()), '_blank');
     var sent = serverEmail(); // auto-email the confirmation too
-    flash(this, sent ? 'WhatsApp opened · emailed ✓' : 'WhatsApp opened ✓');
+    var wrote = crmWriteBack();
+    flash(this, (sent ? 'WhatsApp opened · emailed ✓' : 'WhatsApp opened ✓')
+              + (wrote ? ' · CRM updated' : ''));
   });
   $('btnEmail').addEventListener('click', function(){
     if(!valid()) return;
-    if(SHEET_ENDPOINT){ serverEmail(); flash(this,'Sent ✓'); }
+    if(SHEET_ENDPOINT){ serverEmail(); var wrote = crmWriteBack(); flash(this, wrote ? 'Sent ✓ · CRM updated' : 'Sent ✓'); }
     else { window.location.href = 'mailto:'+encodeURIComponent(val('cEmail'))+'?subject='+encodeURIComponent(emailSubject())+'&body='+encodeURIComponent(emailBody()); }
   });
   $('btnIcs').addEventListener('click', function(){
@@ -476,7 +506,8 @@
       vMake:val('vMake'), vModel:val('vModel'), vYear:val('vYear'), vReg:val('vReg'),
       service:$('service').value, serviceOther:val('serviceOther'),
       date:val('date'), time:val('time'), dur:dur(), loc:document.querySelector('input[name=loc]:checked').value,
-      addr:val('addr'), price:val('price'), deposit:val('deposit'), invoice:val('invoice'), notes:val('notes')
+      addr:val('addr'), price:val('price'), deposit:val('deposit'), invoice:val('invoice'), notes:val('notes'),
+      crmKey: crmKey
     };
   }
   function restore(b){
@@ -489,6 +520,7 @@
     var lc=document.querySelector('input[name=loc][value="'+(b.loc||'mobile')+'"]'); if(lc) lc.checked=true;
     $('addrWrap').style.display = (b.loc!=='workshop') ? '' : 'none';
     $('addr').value=b.addr||''; $('price').value=b.price||''; $('deposit').value=b.deposit||''; $('invoice').value=b.invoice||''; $('notes').value=b.notes||'';
+    crmKey = b.crmKey || '';
     render(); window.scrollTo({top:0,behavior:'smooth'});
   }
 
@@ -599,6 +631,7 @@
     try{
       var p = new URLSearchParams(location.hash.slice(1));
       if(!p.get('name') && !p.get('email')) return;
+      crmKey = p.get('key') || '';
       useEnquiry({ name:p.get('name')||'', title:p.get('title')||'', first:p.get('first')||'', surname:p.get('surname')||'',
                    email:p.get('email')||'', mobile:p.get('phone')||'',
                    make:p.get('make')||'', model:p.get('model')||'', year:p.get('year')||'',

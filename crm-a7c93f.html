@@ -596,6 +596,7 @@ window.__crmStart = function(){
       reg: (e.registration||'').toString().trim(),
       postcode: (e.postcode||'').toString().trim(),
       service: serviceLabel(e),
+      key: (e.timestamp||'').toString(),                      /* so the console can write back */
       invoice: (e.invoiceRef||'').toString().trim(),          /* filed by the Tide sync */
       invoiceLink: (e.invoiceLink||'').toString().trim()
     });
