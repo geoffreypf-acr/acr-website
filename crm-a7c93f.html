@@ -20,6 +20,21 @@
   .crm-btn:hover { border-color: var(--signal-500); background: var(--accent-soft); }
   .crm-btn.primary { background: var(--silver-fill); color: var(--silver-ink); border-color: transparent; }
   .pill { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border-radius: 999px; background: var(--alert-soft); border: 1px solid rgba(224,105,91,.3); color: var(--alert-400); font-size: 13px; font-weight: 600; }
+  .bin { margin: 0 0 18px; padding: 14px 16px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong); background: var(--surface-card); }
+  .bin-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 14px; }
+  .bin-h span { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .bin-h button { margin-left: auto; }
+  .bin-rows { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+  .bin-row { display: flex; align-items: center; gap: 12px; padding: 9px 11px; border-radius: 9px;
+    border: 1px solid var(--border-default); background: var(--surface-inset); }
+  .bin-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .bin-who b { font-size: 13.5px; color: var(--text-primary); }
+  .bin-who span { font-size: 12px; color: var(--text-secondary); }
+  .bin-row button { margin-left: auto; flex: none; }
+  .bin-empty { font-size: 13px; color: var(--text-muted); }
+  .pill.stamp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0; opacity: .8; }
+  .pill.stamp.stale { color: var(--alert-400, #E0695B); border-color: rgba(224,105,91,.45); opacity: 1; }
   .pill.zero { background: var(--surface-inset); border-color: var(--border-default); color: var(--text-muted); }
 
   /* ---- Dashboard ---- */
@@ -84,6 +99,20 @@
   .card .card-act .book { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
     border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-secondary);
     font-family: var(--font-body); font-size: 11.5px; font-weight: 600; text-decoration: none; }
+  .card .card-act { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .card .fu-wrap { position: relative; display: inline-flex; }
+  .card .fu-btn { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border-default);
+    background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body);
+    font-size: 11.5px; font-weight: 600; cursor: pointer; }
+  .card .fu-btn:hover { border-color: var(--signal-500); color: var(--text-primary); background: var(--accent-soft); }
+  .card .fu-menu { position: absolute; top: calc(100% + 5px); left: 0; z-index: 40; display: flex; flex-direction: column;
+    min-width: 118px; padding: 5px; gap: 3px; border-radius: 10px; border: 1px solid var(--border-strong);
+    background: var(--surface-card); box-shadow: 0 12px 28px rgba(0,0,0,.45); }
+  .card .fu-item { padding: 7px 10px; border-radius: 7px; font-family: var(--font-body); font-size: 12px;
+    font-weight: 600; color: var(--text-secondary); text-decoration: none; }
+  .card .fu-item:hover { background: var(--surface-inset); color: var(--text-primary); }
+  .card .fu-item.wa:hover { color: #25D366; }
+  .card .fu-item.gm:hover { color: #E4756B; }
   .card .card-act .book:hover { border-color: var(--signal-500); color: var(--text-primary); background: var(--accent-soft); }
   .chip { font-family: var(--font-mono); font-size: 10.5px; padding: 3px 7px; border-radius: 6px; background: var(--surface-inset); color: var(--text-muted); border: 1px solid var(--border-subtle); }
   .chip.val { color: var(--signal-300); border-color: rgba(47,161,204,.3); }
@@ -286,7 +315,9 @@
     <div class="spacer"></div>
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
     <span class="pill zero" id="fuPill">0 follow-ups due</span>
+    <span class="pill stamp" id="freshPill" title="When the board last pulled data, and the newest record on it">—</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
+    <button class="crm-btn" id="binBtn" title="Records you have deleted - restore any of them">Deleted</button>
     <button class="crm-btn" id="signOut" title="Lock the CRM on this device">Sign out</button>
     <button class="crm-btn" id="forcePull" title="Pull new emails and calls from Gmail now">Force pull</button>
     <button class="crm-btn" id="refresh">Refresh</button>
@@ -294,6 +325,14 @@
   </div>
 
   <div class="banner" id="banner"></div>
+
+  <!-- Deleted records. Nothing is ever really removed - the row is flagged - so
+       anything here can come back with everything it held. -->
+  <div class="bin" id="bin" hidden>
+    <div class="bin-h"><b>Deleted records</b><span id="binCount"></span>
+      <button type="button" class="crm-btn" id="binClose">Close</button></div>
+    <div class="bin-rows" id="binRows"></div>
+  </div>
   <div class="tabs" id="tabs"></div>
   <div class="chans" id="chans"></div>
 
@@ -581,6 +620,100 @@ window.__crmStart = function(){
   function gmailThread(threadId){
     return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/#all/'
          + encodeURIComponent(String(threadId || '').trim());
+  }
+
+  /* How to address them. The forms collect a title, so names arrive as
+     "Mr Alex Marin" - taking the first word blindly would open a message with
+     "Hello Mr,". With a title we use title + surname, which is the right register
+     for a quote anyway; without one, the first name. Placeholder names
+     ("Call 07…") get no greeting at all.
+     Module level, so the cards can use the same wording as the drawer. */
+  var TITLE_RE = /^(mr|mrs|ms|miss|mx|dr|prof|professor|rev|sir|lady|lord)\.?$/i;
+  function addressOf(e){
+    var nm = nameOf(e).trim();
+    var bits = nm.split(/\s+/).filter(Boolean);
+    var ttl = (bits.length && TITLE_RE.test(bits[0])) ? bits.shift() : '';
+    var first = ttl && bits.length ? ttl + ' ' + bits[bits.length - 1] : (bits[0] || '');
+    if(/^call\b/i.test(nm) || /\d/.test(first)) first = '';
+    return first;
+  }
+  var SIGNOFF = '\n\nKind regards,\nACR Automobile';
+  /* Email goes out under the account's own signature, so signing the body as well
+     would sign it twice - the bodies stop at the last sentence and only the chat
+     channels add a sign-off.
+     Line breaks: mailto: gets CRLF. Some desktop clients drop a bare \n and run
+     the whole message into a single paragraph. */
+  function chatBody(t){ return t.body + SIGNOFF; }
+  function mailBody(t){ return t.body.replace(/\r?\n/g, '\r\n'); }
+
+  function templatesFor(e){
+    var first = addressOf(e);
+    var hi = first ? 'Hello ' + first + ',' : 'Hello,';
+    return [
+      { id:'missed', label:'Call reply', subject:'Sorry we missed your call — ACR Automobile',
+        body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?' },
+      { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
+        body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.' },
+      { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
+        body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.' },
+      { id:'review', label:'Review request', subject:'Thank you from ACR Automobile',
+        body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.' },
+      { id:'decline', label:'Unable to help', subject:'Your enquiry \u2014 ACR Automobile',
+        body: hi + '\n\nThank you for your enquiry and for considering ACR Automobile.\n\nUnfortunately, we are unable to fulfil this request on this occasion.\n\nWe are sorry that we cannot help this time. Please do keep us in mind for any future work \u2014 we would be glad to hear from you.' }
+    ];
+  }
+  function templateById(e, id){
+    return templatesFor(e).filter(function(t){ return t.id===id; })[0];
+  }
+
+  /* Follow up from the card: the same wording as the drawer's Follow-up template,
+     on whichever channels this record actually has. Email is Gmail (or the Gmail
+     app on a phone), so it never lands in a mail client signed in as someone else.
+     Sending also ticks the follow-up counter, which is what that number is for. */
+  function followUpMenu(e){
+    var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
+    var mail   = (e.email||'').toString().trim();
+    if(!digits && !mail) return '';
+    var t = templateById(e, 'follow');
+    var items = '';
+    if(mail)   items += '<a class="fu-item gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Email</a>';
+    if(digits) items += '<a class="fu-item wa" target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>';
+    return '<span class="fu-wrap">'
+         +   '<button type="button" class="fu-btn">Follow up \u25be</button>'
+         +   '<span class="fu-menu" hidden>'+items+'</span>'
+         + '</span>';
+  }
+
+  function wireFollowUp(card, e){
+    var btn = card.querySelector('.fu-btn'), menu = card.querySelector('.fu-menu');
+    if(!btn || !menu) return;
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var open = !menu.hidden;
+      /* one menu at a time */
+      document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
+      menu.hidden = open;
+    });
+    menu.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        menu.hidden = true;
+        bumpFollowUp(e);
+      });
+    });
+  }
+  /* Close any open menu when you click elsewhere on the board. */
+  document.addEventListener('click', function(){
+    document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
+  });
+
+  /* One more chase recorded, capped at 3 - the same scale the drawer uses. */
+  function bumpFollowUp(e){
+    var n = fnum(e) + 1;
+    if(n > 3) n = 3;
+    e.followups = n;
+    save(e.timestamp, { followups: n });
+    render();
   }
 
   /* Straight into the booking console with the job's details already filled in.
@@ -964,11 +1097,19 @@ window.__crmStart = function(){
           +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'')
           /* Booking is the next step for anything still open, so it should not
              need the drawer first. Closed-out records don't get the button. */
-          +(isClosedOut(s.key) ? '' :
-             '<div class="card-act"><a class="book" href="'+bookHref(e)+'">Book the job \u2192</a></div>');
+          +(isClosedOut(s.key) ? '' : '<div class="card-act">'
+             + '<a class="book" href="'+bookHref(e)+'">Book the job \u2192</a>'
+             /* Chasing is the commonest thing to do to an open record, so it should
+                not need the drawer either. The menu only offers channels the record
+                actually has. */
+             + (followUpMenu(e) || '')
+           + '</div>');
         card.addEventListener('click', function(){ openDrawer(e); });
-        var bk = card.querySelector('a.book');
-        if(bk) bk.addEventListener('click', function(ev){ ev.stopPropagation(); });  /* don't open the drawer too */
+        /* Nothing inside the action row should open the drawer as well. */
+        card.querySelectorAll('.card-act a, .card-act button').forEach(function(el){
+          el.addEventListener('click', function(ev){ ev.stopPropagation(); });
+        });
+        wireFollowUp(card, e);
         card.addEventListener('dragstart', function(ev){ dragKey=e.timestamp; ev.dataTransfer.effectAllowed='move'; });
         body.appendChild(card);
       });
@@ -981,6 +1122,7 @@ window.__crmStart = function(){
     renderTabs();
     renderChans();
     renderDash();
+    if(!$('bin').hidden) renderBin();
   }
 
   /* Dashboard is a view of its own, not a strip above the board - showing the
@@ -991,6 +1133,7 @@ window.__crmStart = function(){
     function apply(on){
       box.hidden = !on;
       var tabs=$('tabs'), board=$('board'), chans=$('chans');
+      if(on && $('bin')){ $('bin').hidden = true; $('binBtn').classList.remove('primary'); }
       if(tabs)  tabs.hidden  = on;
       if(chans) chans.hidden = on;
       if(board) board.hidden = on;
@@ -1079,30 +1222,7 @@ window.__crmStart = function(){
     /* ---- Quick message templates (follow-up / closing) ---- */
     (function(){
       var box = $('dTemplates');
-      /* How to address them. The forms now collect an optional title, so names
-         arrive as "Mr Alex Marin" - taking the first word blindly would open a
-         message with "Hello Mr,". With a title we use title + surname, which is
-         the right register for a quote anyway; without one, the first name.
-         Placeholder names ("Call 07…") get no greeting at all. */
-      var TITLE_RE = /^(mr|mrs|ms|miss|mx|dr|prof|professor|rev|sir|lady|lord)\.?$/i;
-      var nm = nameOf(e).trim();
-      var bits = nm.split(/\s+/).filter(Boolean);
-      var ttl = (bits.length && TITLE_RE.test(bits[0])) ? bits.shift() : '';
-      var first = ttl && bits.length ? ttl + ' ' + bits[bits.length - 1] : (bits[0] || '');
-      if(/^call\b/i.test(nm) || /\d/.test(first)) first = '';
-      var hi = first ? 'Hello ' + first + ',' : 'Hello,';
-      var TPL = [
-        { id:'missed', label:'Call reply', subject:'Sorry we missed your call — ACR Automobile',
-          body: (first ? 'Hi ' + first + ',' : 'Hi,') + '\n\nThank you for contacting ACR Automobile. We apologise for missing your call.\n\nPlease let us know how we can help?' },
-        { id:'follow', label:'Follow-up', subject:'Following up on your enquiry — ACR Automobile',
-          body: hi + '\n\nJust a quick follow-up to check if our service is still required.\n\nPlease let us know at your earliest convenience so we can assist you further.' },
-        { id:'close', label:'Closing request', subject:'Closing your service request — ACR Automobile',
-          body: hi + '\n\nWe have made several attempts to follow up regarding your service request but have not yet received a response.\n\nWe will proceed with closing the request due to no reply received.\n\nShould you still require our services, please feel free to contact us at any time and we will be happy to assist.' },
-        { id:'review', label:'Review request', subject:'Thank you from ACR Automobile',
-          body: hi + '\n\nACR Automobile would love your feedback. Post a review to our profile.\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\nPlease let us know when you\u2019ve done it. This would help our business a lot.\n\nWe would like to thank you and appreciate you for using our services.' },
-        { id:'decline', label:'Unable to help', subject:'Your enquiry \u2014 ACR Automobile',
-          body: hi + '\n\nThank you for your enquiry and for considering ACR Automobile.\n\nUnfortunately, we are unable to fulfil this request on this occasion.\n\nWe are sorry that we cannot help this time. Please do keep us in mind for any future work \u2014 we would be glad to hear from you.' }
-      ];
+      var TPL = templatesFor(e);
       /* Whatever is most likely next for this record goes first: a review once the
          job is done, the decline on one we have turned down, a call-back reply on
          a phone lead, chasing otherwise. */
@@ -1115,14 +1235,6 @@ window.__crmStart = function(){
       var stNow = statusOf(e);
       var order = ORDER[stNow] || (isCall(e) ? ORDER['Call back'] : ORDER['default']);
       TPL.sort(function(a,b){ return order.indexOf(a.id) - order.indexOf(b.id); });
-      /* Email goes out under the account's own signature, so signing the body as
-         well would sign it twice - the bodies above stop at the last sentence and
-         only the chat channels add a sign-off.
-         Line breaks: mailto: gets CRLF. Some desktop clients drop a bare \n and
-         run the whole message into a single paragraph, which is what happened. */
-      var SIGNOFF = '\n\nKind regards,\nACR Automobile';
-      var chatBody = function(t){ return t.body + SIGNOFF; };
-      var mailBody = function(t){ return t.body.replace(/\r?\n/g, '\r\n'); };
       var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
       var mail = (e.email||'').toString().trim();
       if(!digits && !mail){ box.style.display='none'; box.innerHTML=''; return; }
@@ -1198,9 +1310,79 @@ window.__crmStart = function(){
     showToast(nm+' deleted', function(){ e.deleted=''; save(e.timestamp, { deleted:'' }); render(); });
   });
 
+  /* The 6-second undo covers a misclick. This covers everything else: deleting
+     only sets a flag on the row, so a record from last week can still come back
+     with its notes, value, invoice and stage intact. */
+  function renderBin(){
+    var box = $('binRows'), gone = data.filter(isDeleted);
+    $('binCount').textContent = gone.length ? '(' + gone.length + ')' : '';
+    if(!gone.length){ box.innerHTML = '<div class="bin-empty">Nothing deleted.</div>'; return; }
+    gone.sort(function(a,b){ return new Date(b.timestamp||0) - new Date(a.timestamp||0); });
+    box.innerHTML = '';
+    gone.forEach(function(e){
+      var row = document.createElement('div');
+      row.className = 'bin-row';
+      row.innerHTML = '<div class="bin-who"><b>' + esc(nameOf(e)||'\u2014') + '</b>'
+        + '<span>' + esc([serviceLabel(e), vehicle(e), whenOf(e)].filter(Boolean).join(' \u00b7 ')) + '</span></div>'
+        + '<button type="button" class="crm-btn">Restore</button>';
+      row.querySelector('button').addEventListener('click', function(){
+        e.deleted = '';
+        save(e.timestamp, { deleted: '' });
+        render(); renderBin();
+        showToast(nameOf(e) + ' restored', function(){
+          e.deleted = 'TRUE'; save(e.timestamp, { deleted: 'TRUE' }); render(); renderBin();
+        });
+      });
+      box.appendChild(row);
+    });
+  }
+  (function(){
+    var btn = $('binBtn'), box = $('bin');
+    if(!btn || !box) return;
+    btn.addEventListener('click', function(){
+      box.hidden = !box.hidden;
+      btn.classList.toggle('primary', !box.hidden);
+      if(!box.hidden) renderBin();
+    });
+    $('binClose').addEventListener('click', function(){
+      box.hidden = true; btn.classList.remove('primary');
+    });
+  })();
+
   /* Google occasionally returns an error page instead of the data - usually a
      brief hiccup after a burst of writes. Retry a couple of times before
      giving up, and never leave the page blank without saying why. */
+  /* When did the board last hear from the sheet, and what is the newest thing on
+     it? Without this there is no way to tell a quiet morning from a sync that
+     stopped hours ago - which is exactly the failure this CRM exists to catch. */
+  var lastPull = null;
+  function ago(d){
+    var s = Math.floor((Date.now() - d.getTime())/1000);
+    if(s < 45)   return 'just now';
+    if(s < 90)   return 'a minute ago';
+    if(s < 3600) return Math.round(s/60) + ' min ago';
+    if(s < 5400) return 'an hour ago';
+    if(s < 86400) return Math.round(s/3600) + ' hours ago';
+    return Math.round(s/86400) + ' days ago';
+  }
+  function stamp(){
+    var el = $('freshPill'); if(!el) return;
+    if(!lastPull){ el.textContent = '\u2014'; return; }
+    var bits = ['Updated ' + ago(lastPull)];
+    /* The newest record matters as much as the pull: a fresh pull that found
+       nothing new for two days is worth noticing. */
+    var newest = null;
+    data.forEach(function(e){
+      if(isDeleted(e) || !e.timestamp) return;
+      var d = new Date(e.timestamp);
+      if(!isNaN(d) && (!newest || d > newest)) newest = d;
+    });
+    if(newest) bits.push('newest ' + ago(newest));
+    el.textContent = bits.join(' \u00b7 ');
+    el.classList.toggle('stale', (Date.now() - lastPull.getTime()) > 2*3600*1000);
+  }
+  setInterval(stamp, 30000);
+
   function load(attempt){
     attempt = attempt || 1;
     $('refresh').textContent = attempt>1 ? ('Retrying '+attempt+'/3…') : 'Loading…';
@@ -1217,7 +1399,9 @@ window.__crmStart = function(){
         data = list.filter(function(e){ return e.timestamp || e.name || e.email; });
         $('banner').style.display='none';
         $('refresh').textContent='Refresh';
+        lastPull = new Date();
         render();
+        stamp();
       })
       .catch(function(err){
         if(attempt < 3){
