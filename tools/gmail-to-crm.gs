@@ -108,6 +108,11 @@ var CFG = {
   // future phone and WhatsApp jobs cannot be invoiced and then lost - which is
   // exactly what happened to the 23 this backfilled. Set false to stop that.
   TIDE_CREATE_MISSING: true,
+  // Re-examine invoices already filed and correct the value and the stage - the
+  // way to fix rows written before a parser fix. It only ever fills an empty
+  // value and moves a paid invoice to Completed; it never overwrites a figure you
+  // typed or drags a Completed, Lost or Archived record backwards.
+  TIDE_REFRESH: true,                // on for the one-off correction; set false after
 
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
@@ -498,7 +503,7 @@ function tideInvoices_(dryRun) {
   if (!threads.length) { Logger.log('No Tide mail in the last %s days. Query: %s', CFG.TIDE_DAYS, query); return 0; }
   var bulk = GmailApp.getMessagesForThreads(threads);
 
-  var attached = 0, unmatched = [], skipped = 0, shown = 0, seenRef = {}, cancelled = [], created = 0, newRows = [], newKeys = {};
+  var attached = 0, unmatched = [], skipped = 0, shown = 0, seenRef = {}, cancelled = [], created = 0, newRows = [], refreshed = { n: 0 };
 
   threads.forEach(function (thread, idx) {
     var msgs = bulk[idx] || thread.getMessages();
@@ -511,7 +516,8 @@ function tideInvoices_(dryRun) {
     /* Tide's payment mails say so in the subject. Threads are newest first, so if
        the latest word on an invoice is that it was paid, the job is done - filing
        it as "Invoice sent" would count settled work as open pipeline. */
-    inv.paid = /\b(paid|payment\s+received)\b/i.test(subject);
+    inv.paid = /\b(paid|payment\s+received)\b/i.test(subject)
+            || /receipt\s+for\s+(?:your\s+)?invoice\s+payment/i.test(subject);
     /* Tide addresses the invoice to the customer and copies us, so the To: line
        is often the only place the customer appears. */
     var to      = '';
@@ -529,6 +535,19 @@ function tideInvoices_(dryRun) {
     }
 
     var link = 'https://mail.google.com/mail/u/0/#all/' + thread.getId();
+    /* Already filed against some row? Then this invoice has a home and matching
+       it again can only do harm - it would overwrite whichever invoice that row
+       actually belongs to. */
+    if (inv.ref && refCol > -1) {
+      var already = -1;
+      for (var q = 0; q < rows.length; q++) {
+        if (String(rows[q][refCol] || '').trim() === inv.ref) { already = q; break; }
+      }
+      if (already > -1) {
+        if (CFG.TIDE_REFRESH) refresh_(sheet, rows, already, inv, valCol, stCol, refreshed);
+        skipped++; return;
+      }
+    }
     var m    = matchRow_(rows, inv, nameCol, mailCol, mobCol);
     var hit  = m.i;
 
@@ -549,17 +568,9 @@ function tideInvoices_(dryRun) {
       /* An invoice with no record means a paying customer who is not on the board
          at all. Optionally put them there rather than losing them. */
       if (CFG.TIDE_CREATE_MISSING && (inv.email || inv.name)) {
-        /* Same customer, second invoice: note it on the record we are already
-           creating rather than creating them twice. Newest invoice wins the row
-           because threads arrive newest first. */
-        var key = (inv.email || normName_(inv.name));
-        if (newKeys[key] !== undefined) {
-          var prev = newRows[newKeys[key]];
-          prev.details = prev.details + ' | also ' + (inv.ref || 'another invoice')
-                       + (inv.total ? ' ' + inv.total : '');
-          return;
-        }
-        newKeys[key] = newRows.length;
+        /* One record per INVOICE, not per customer: two invoices are two jobs, and
+           collapsing them would hide the second job and its value. Only a repeat
+           of the SAME invoice number is dropped, and the check above catches that. */
         newRows.push({
           timestamp:      msg.getDate().toISOString(),
           name:           inv.name || inv.email,
@@ -621,8 +632,8 @@ function tideInvoices_(dryRun) {
     });
     sheet.getRange(sheet.getLastRow() + 1, 1, out.length, headers.length).setValues(out);
   }
-  Logger.log('%s%s invoice(s) attached, %s new record(s), %s skipped, %s unmatched.',
-             dryRun ? 'DRY RUN - ' : '', attached, created, skipped, unmatched.length);
+  Logger.log('%s%s invoice(s) attached, %s new record(s), %s refreshed, %s skipped, %s unmatched.',
+             dryRun ? 'DRY RUN - ' : '', attached, created, refreshed.n, skipped, unmatched.length);
   return attached + created;
 }
 
@@ -693,6 +704,28 @@ function firstOutsideEmail_(text) {
         && a.indexOf('noreply') < 0 && a.indexOf('no-reply') < 0) return a;
   }
   return '';
+}
+
+/**
+ * Correct a row whose invoice is already filed: fill an empty value, and move it
+ * to Completed if the invoice turns out to have been paid. Deliberately narrow -
+ * it will not overwrite a value you set by hand, and will not reopen or reclassify
+ * a job you have already closed.
+ */
+function refresh_(sheet, rows, i, inv, valCol, stCol, tally) {
+  var did = [];
+  if (valCol > -1 && inv.total && !String(rows[i][valCol] || '').trim()) {
+    sheet.getRange(i + 2, valCol + 1).setValue(inv.total.replace(/[^\d.]/g, ''));
+    did.push('value ' + inv.total);
+  }
+  if (stCol > -1 && inv.paid) {
+    var cur = String(rows[i][stCol] || '').trim();
+    if (cur !== 'Completed' && cur !== 'Lost' && cur !== 'Archive') {
+      sheet.getRange(i + 2, stCol + 1).setValue('Completed');
+      did.push('paid -> Completed');
+    }
+  }
+  if (did.length) { tally.n++; Logger.log('  refreshed %s: %s', inv.ref, did.join(', ')); }
 }
 
 /** Names compare badly raw: titles, case, punctuation, double spaces. */
