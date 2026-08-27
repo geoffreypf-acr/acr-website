@@ -112,7 +112,7 @@ var CFG = {
   // way to fix rows written before a parser fix. It only ever fills an empty
   // value and moves a paid invoice to Completed; it never overwrites a figure you
   // typed or drags a Completed, Lost or Archived record backwards.
-  TIDE_REFRESH: true,                // on for the one-off correction; set false after
+  TIDE_REFRESH: false,               // off: the corrective pass is done. Set true to re-run it.
 
   // Senders that are never a customer enquiry.
   IGNORE_SENDERS: [
