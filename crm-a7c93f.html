@@ -20,6 +20,18 @@
   .crm-btn:hover { border-color: var(--signal-500); background: var(--accent-soft); }
   .crm-btn.primary { background: var(--silver-fill); color: var(--silver-ink); border-color: transparent; }
   .pill { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 14px; border-radius: 999px; background: var(--alert-soft); border: 1px solid rgba(224,105,91,.3); color: var(--alert-400); font-size: 13px; font-weight: 600; }
+  .bulk { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 11px 14px;
+    border-radius: var(--radius-md); border: 1px solid var(--border-signal, rgba(47,161,204,.3));
+    background: var(--accent-soft, rgba(47,161,204,.08)); font-size: 13.5px; }
+  .bulk label { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 13px; }
+  .bulk select { height: 34px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border-default);
+    background: var(--surface-inset); color: var(--text-primary); font-family: var(--font-body); font-size: 13px; }
+  .bulk button:disabled { opacity: .45; cursor: default; }
+  .card.selectable { cursor: pointer; padding-left: 34px; position: relative; }
+  .card.selectable .tick { position: absolute; left: 11px; top: 12px; width: 16px; height: 16px; border-radius: 4px;
+    border: 1px solid var(--border-strong); display: grid; place-items: center; font-size: 11px; color: #06212C; }
+  .card.picked { border-color: var(--signal-500); background: var(--accent-soft, rgba(47,161,204,.08)); }
+  .card.picked .tick { background: var(--signal-500); border-color: var(--signal-500); }
   .bin { margin: 0 0 18px; padding: 14px 16px; border-radius: var(--radius-md);
     border: 1px solid var(--border-strong); background: var(--surface-card); }
   .bin-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 14px; }
@@ -322,6 +334,7 @@
     <button type="button" class="pill zero" id="fuPill" title="Show only records whose follow-up date has passed">0 follow-ups due</button>
     <span class="pill stamp" id="freshPill" title="When the board last pulled data, and the newest record on it">—</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
+    <button class="crm-btn" id="selBtn" title="Select several records and move them together">Select</button>
     <button class="crm-btn" id="binBtn" title="Records you have deleted - restore any of them">Deleted</button>
     <button class="crm-btn" id="signOut" title="Lock the CRM on this device">Sign out</button>
     <button class="crm-btn" id="forcePull" title="Pull new emails and calls from Gmail now">Force pull</button>
@@ -340,6 +353,17 @@
   </div>
   <div class="tabs" id="tabs"></div>
   <div class="chans" id="chans"></div>
+
+  <!-- Bulk actions. Dragging moves one record; this moves a dozen. -->
+  <div class="bulk" id="bulk" hidden>
+    <b id="bulkCount">0 selected</b>
+    <label>Move to
+      <select id="bulkStage"></select>
+    </label>
+    <button type="button" class="crm-btn primary" id="bulkApply">Apply</button>
+    <button type="button" class="crm-btn" id="bulkAll">Select all shown</button>
+    <button type="button" class="crm-btn" id="bulkNone">Clear</button>
+  </div>
 
   <div class="dash" id="dash" hidden>
     <label class="dash-opt"><input type="checkbox" id="dashArch"> Include archived</label>
@@ -678,6 +702,62 @@ window.__crmStart = function(){
       /* Overdue records can sit in any stage, so a stage tab would hide them. */
       if(dueOnly) localStorage.setItem(TAB_KEY, 'all');
       render();
+    });
+  })();
+
+  /* Move several records at once. Statuses are captured first so the whole move can
+     be undone in one go - a bulk change is exactly where a mistake hurts most. */
+  function renderBulk(){
+    var bar = $('bulk'); if(!bar) return;
+    bar.hidden = !selMode;
+    if(!selMode) return;
+    var n = pickedKeys().length;
+    $('bulkCount').textContent = n + ' selected';
+    $('bulkApply').disabled = !n;
+    var sel = $('bulkStage');
+    if(!sel.options.length){
+      STAGES.forEach(function(st){
+        var o=document.createElement('option'); o.value=st.key; o.textContent=st.key; sel.appendChild(o);
+      });
+    }
+  }
+  (function(){
+    var btn=$('selBtn'); if(!btn) return;
+    btn.addEventListener('click', function(){
+      selMode = !selMode;
+      if(!selMode) picked = {};
+      btn.classList.toggle('primary', selMode);
+      btn.textContent = selMode ? 'Done' : 'Select';
+      render();
+    });
+    $('bulkNone').addEventListener('click', function(){ picked = {}; render(); });
+    $('bulkAll').addEventListener('click', function(){
+      /* "shown" means what is on the board right now - the stage tab, the channel
+         filter and the search box all still apply. */
+      document.querySelectorAll('#board .card').forEach(function(c){ picked[c.dataset.key] = true; });
+      render();
+    });
+    $('bulkApply').addEventListener('click', function(){
+      var keys = pickedKeys(), to = $('bulkStage').value;
+      if(!keys.length || !to) return;
+      var before = [];
+      keys.forEach(function(k){
+        for(var i=0;i<data.length;i++){
+          if(String(data[i].timestamp)!==String(k)) continue;
+          if(statusOf(data[i])===to) return;              /* already there */
+          before.push({ e:data[i], was:data[i].status||'' });
+          data[i].status = to;
+          save(k, { status: to });
+          return;
+        }
+      });
+      picked = {};
+      render();
+      if(!before.length) return;
+      showToast(before.length + ' moved to ' + to, function(){
+        before.forEach(function(b){ b.e.status = b.was; save(b.e.timestamp, { status: b.was }); });
+        render();
+      });
     });
   })();
 
@@ -1102,6 +1182,9 @@ window.__crmStart = function(){
   })();
 
   var dueOnly = false;
+  /* Multi-select. Off by default: a stray tap must open a record, not select it. */
+  var selMode = false, picked = {};
+  function pickedKeys(){ return Object.keys(picked).filter(function(k){ return picked[k]; }); }
   function render(){
     var q = ($('search').value||'').toLowerCase().trim();
     var chan = curChan();
@@ -1131,8 +1214,9 @@ window.__crmStart = function(){
       if(!items.length){ body.innerHTML='<div class="empty-col">—</div>'; }
       items.forEach(function(e){
         if(isOverdue(e)) due++;
-        var card=document.createElement('div'); card.className='card'+(isOverdue(e)?' overdue':'');
-        card.draggable=true; card.dataset.key=e.timestamp;
+        var card=document.createElement('div');
+        card.className='card'+(isOverdue(e)?' overdue':'')+(selMode?' selectable':'')+(picked[e.timestamp]?' picked':'');
+        card.draggable=!selMode; card.dataset.key=e.timestamp;
         var chips=[];
         var fn=fnum(e); if(fn) chips.push('<span class="chip fnum n'+fn+'">Follow-up '+fn+'</span>');
         var ch=chasedChip(e); if(ch) chips.push('<span class="chip chase" title="'+esc(ch.title)+'">'+esc(ch.text)+'</span>');
@@ -1154,14 +1238,18 @@ window.__crmStart = function(){
           +(chips.length?'<div class="row2">'+chips.join('')+'</div>':'')
           /* Booking is the next step for anything still open, so it should not
              need the drawer first. Closed-out records don't get the button. */
-          +(isClosedOut(s.key) ? '' : '<div class="card-act">'
+          +(selMode ? '<span class="tick">'+(picked[e.timestamp]?'\u2713':'')+'</span>' : '')
+          +(isClosedOut(s.key) || selMode ? '' : '<div class="card-act">'
              + '<a class="book" href="'+bookHref(e)+'">Book the job \u2192</a>'
              /* Chasing is the commonest thing to do to an open record, so it should
                 not need the drawer either. The menu only offers channels the record
                 actually has. */
              + (followUpMenu(e) || '')
            + '</div>');
-        card.addEventListener('click', function(){ openDrawer(e); });
+        card.addEventListener('click', function(){
+          if(selMode){ picked[e.timestamp] = !picked[e.timestamp]; render(); return; }
+          openDrawer(e);
+        });
         /* Nothing inside the action row should open the drawer as well. */
         card.querySelectorAll('.card-act a, .card-act button').forEach(function(el){
           el.addEventListener('click', function(ev){ ev.stopPropagation(); });
@@ -1185,6 +1273,7 @@ window.__crmStart = function(){
     pill.disabled = !dueAll && !dueOnly;
     renderTabs();
     renderChans();
+    renderBulk();
     renderDash();
     if(!$('bin').hidden) renderBin();
   }
@@ -1198,6 +1287,7 @@ window.__crmStart = function(){
       box.hidden = !on;
       var tabs=$('tabs'), board=$('board'), chans=$('chans');
       if(on && $('bin')){ $('bin').hidden = true; $('binBtn').classList.remove('primary'); }
+      if(on && $('bulk')) $('bulk').hidden = true;
       if(tabs)  tabs.hidden  = on;
       if(chans) chans.hidden = on;
       if(board) board.hidden = on;
