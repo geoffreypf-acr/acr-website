@@ -33,6 +33,9 @@
   .bin-who span { font-size: 12px; color: var(--text-secondary); }
   .bin-row button { margin-left: auto; flex: none; }
   .bin-empty { font-size: 13px; color: var(--text-muted); }
+  button.pill { cursor: pointer; font: inherit; }
+  button.pill:disabled { cursor: default; }
+  .pill.on { background: var(--alert-soft, rgba(224,105,91,.14)); border-color: var(--alert-400, #E0695B); color: var(--alert-400, #E0695B); }
   .pill.stamp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0; opacity: .8; }
   .pill.stamp.stale { color: var(--alert-400, #E0695B); border-color: rgba(224,105,91,.45); opacity: 1; }
   .pill.zero { background: var(--surface-inset); border-color: var(--border-default); color: var(--text-muted); }
@@ -316,7 +319,7 @@
     <h1>Pipeline</h1>
     <div class="spacer"></div>
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
-    <span class="pill zero" id="fuPill">0 follow-ups due</span>
+    <button type="button" class="pill zero" id="fuPill" title="Show only records whose follow-up date has passed">0 follow-ups due</button>
     <span class="pill stamp" id="freshPill" title="When the board last pulled data, and the newest record on it">—</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="binBtn" title="Records you have deleted - restore any of them">Deleted</button>
@@ -667,6 +670,16 @@ window.__crmStart = function(){
   function templateById(e, id){
     return templatesFor(e).filter(function(t){ return t.id===id; })[0];
   }
+
+  (function(){
+    var pill = $('fuPill'); if(!pill) return;
+    pill.addEventListener('click', function(){
+      dueOnly = !dueOnly;
+      /* Overdue records can sit in any stage, so a stage tab would hide them. */
+      if(dueOnly) localStorage.setItem(TAB_KEY, 'all');
+      render();
+    });
+  })();
 
   /* When this record was last chased. Separate from the count on purpose: three
      chases in one afternoon and three over three months need different handling,
@@ -1088,6 +1101,7 @@ window.__crmStart = function(){
     try { localStorage.setItem(CLOSED_KEY, JSON.stringify(['Completed','On Hold','Lost','Archive'])); } catch(e){}
   })();
 
+  var dueOnly = false;
   function render(){
     var q = ($('search').value||'').toLowerCase().trim();
     var chan = curChan();
@@ -1098,6 +1112,7 @@ window.__crmStart = function(){
     shown.forEach(function(s){
       var items = data.filter(function(e){ return !isDeleted(e) && statusOf(e)===s.key; })
         .filter(function(e){ return matchChan(e, chan); })
+        .filter(function(e){ return !dueOnly || isOverdue(e); })
         .filter(function(e){ if(!q) return true; return (e.name+' '+vehicle(e)+' '+serviceOf(e)+' '+(e.email||'')).toLowerCase().indexOf(q)>-1; })
         .sort(function(a,b){ return new Date(b.timestamp||0)-new Date(a.timestamp||0); });
       var sum = items.reduce(function(t,e){ return t+valNum(e); },0);
@@ -1160,7 +1175,14 @@ window.__crmStart = function(){
       col.addEventListener('drop', function(ev){ ev.preventDefault(); col.classList.remove('drop'); if(dragKey){ setStatus(dragKey, s.key); dragKey=null; } });
       board.appendChild(col);
     });
-    var pill=$('fuPill'); pill.textContent = due+' follow-up'+(due===1?'':'s')+' due'; pill.className='pill'+(due?'':' zero');
+    /* `due` is counted while drawing the columns, so in filtered view it only counts
+       what is on screen - keep the total from the whole board instead. */
+    var dueAll = data.filter(function(e){ return !isDeleted(e) && isOverdue(e); }).length;
+    var pill=$('fuPill');
+    pill.textContent = dueOnly ? ('Showing ' + dueAll + ' overdue \u00b7 clear')
+                               : (dueAll+' follow-up'+(dueAll===1?'':'s')+' due');
+    pill.className = 'pill' + (dueAll?'':' zero') + (dueOnly?' on':'');
+    pill.disabled = !dueAll && !dueOnly;
     renderTabs();
     renderChans();
     renderDash();
