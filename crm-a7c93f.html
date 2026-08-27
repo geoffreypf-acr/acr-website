@@ -114,7 +114,8 @@
   .card .card-act .book { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
     border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-secondary);
     font-family: var(--font-body); font-size: 11.5px; font-weight: 600; text-decoration: none; }
-  .card .card-act { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .card .card-act { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .card .fu-menu { min-width: 118px; }
   .card .fu-wrap { position: relative; display: inline-flex; }
   .card .fu-btn { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border-default);
     background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body);
@@ -786,35 +787,39 @@ window.__crmStart = function(){
      on whichever channels this record actually has. Email is Gmail (or the Gmail
      app on a phone), so it never lands in a mail client signed in as someone else.
      Sending also ticks the follow-up counter, which is what that number is for. */
-  function followUpMenu(e){
+  function cardMenu(e, tplId, label){
     var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
     var mail   = (e.email||'').toString().trim();
     if(!digits && !mail) return '';
-    var t = templateById(e, 'follow');
+    var t = templateById(e, tplId);
     var items = '';
     if(mail)   items += '<a class="fu-item gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Email</a>';
     if(digits) items += '<a class="fu-item wa" target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>';
-    return '<span class="fu-wrap">'
-         +   '<button type="button" class="fu-btn">Follow up \u25be</button>'
+    return '<span class="fu-wrap" data-tpl="'+tplId+'">'
+         +   '<button type="button" class="fu-btn">'+label+' \u25be</button>'
          +   '<span class="fu-menu" hidden>'+items+'</span>'
          + '</span>';
   }
+  function followUpMenu(e){ return cardMenu(e, 'follow', 'Follow up'); }
+  function closeMenu(e){ return cardMenu(e, 'close', 'Close'); }
 
   function wireFollowUp(card, e){
-    var btn = card.querySelector('.fu-btn'), menu = card.querySelector('.fu-menu');
-    if(!btn || !menu) return;
-    btn.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      var open = !menu.hidden;
-      /* one menu at a time */
-      document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
-      menu.hidden = open;
-    });
-    menu.querySelectorAll('a').forEach(function(a){
-      a.addEventListener('click', function(ev){
+    card.querySelectorAll('.fu-wrap').forEach(function(wrap){
+      var btn = wrap.querySelector('.fu-btn'), menu = wrap.querySelector('.fu-menu');
+      if(!btn || !menu) return;
+      btn.addEventListener('click', function(ev){
         ev.stopPropagation();
-        menu.hidden = true;
-        bumpFollowUp(e);
+        var open = !menu.hidden;
+        /* one menu at a time, across every card */
+        document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
+        menu.hidden = open;
+      });
+      menu.querySelectorAll('a').forEach(function(a){
+        a.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          menu.hidden = true;
+          bumpFollowUp(e);
+        });
       });
     });
   }
@@ -1246,6 +1251,9 @@ window.__crmStart = function(){
                 not need the drawer either. The menu only offers channels the record
                 actually has. */
              + (followUpMenu(e) || '')
+             /* The last chase before giving up. Same shape as Follow up, so it sits
+                beside it rather than needing the drawer. */
+             + (closeMenu(e) || '')
            + '</div>');
         card.addEventListener('click', function(){
           if(selMode){ picked[e.timestamp] = !picked[e.timestamp]; render(); return; }
