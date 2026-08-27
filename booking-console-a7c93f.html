@@ -20,6 +20,7 @@
   .bk-head > div { flex: 1 1 240px; min-width: 200px; }
   .bk-head h1 { overflow-wrap: normal; word-break: normal; }
   .bk-head img { height: 26px; }
+  .bk-head .tag.ver { color: var(--text-muted); border-color: var(--border-default); background: transparent; letter-spacing: .04em; }
   .bk-head .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--warn-400); border: 1px solid rgba(223,174,78,.35); background: var(--warn-soft); padding: 4px 10px; border-radius: 999px; }
   .bk-head h1 { font-family: var(--font-display); font-size: 30px; letter-spacing: .02em; margin: 0; font-weight: 400; }
   .bk-head .sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
@@ -213,6 +214,7 @@
     </div>
     <a class="btn btn-ghost" href="crm-a7c93f.html" style="width:auto;height:42px;padding:0 16px;text-decoration:none">← CRM pipeline</a>
     <span class="tag">Private · not indexed</span>
+      <span class="tag ver" id="verStamp" title="When the page you are looking at was built. If this is not today, the browser is showing a cached copy - hard-refresh with Cmd-Shift-R.">…</span>
   </div>
 
   <div class="bk-grid">
@@ -493,6 +495,16 @@
     var g = nat.length===10 ? nat.slice(0,4)+' '+nat.slice(4) : nat;
     return '+44 '+g;
   }
+
+  /* Which build am I looking at? A cached page reports the cached copy's date, so
+     this is the quickest way to tell a stale page from a broken fix. */
+  (function(){
+    var el = document.getElementById('verStamp'); if(!el) return;
+    var d = new Date(document.lastModified);
+    el.textContent = isNaN(d) ? 'build ?' :
+      'build ' + d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
+      d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  })();
 
   function emailSubject(){ return 'Your '+BIZ.name+' booking — '+fmtDate(startDate())+' at '+fmtTime(startDate()); }
 

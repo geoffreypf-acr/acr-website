@@ -333,6 +333,7 @@
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
     <button type="button" class="pill zero" id="fuPill" title="Show only records whose follow-up date has passed">0 follow-ups due</button>
     <span class="pill stamp" id="freshPill" title="When the board last pulled data, and the newest record on it">—</span>
+    <span class="pill stamp" id="verStamp" title="When the page you are looking at was built. Not today's date? The browser is showing a cached copy - hard-refresh.">…</span>
     <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="selBtn" title="Select several records and move them together">Select</button>
     <button class="crm-btn" id="binBtn" title="Records you have deleted - restore any of them">Deleted</button>
@@ -1533,6 +1534,16 @@ window.__crmStart = function(){
      it? Without this there is no way to tell a quiet morning from a sync that
      stopped hours ago - which is exactly the failure this CRM exists to catch. */
   var lastPull = null;
+  /* Which build is loaded. A cached page reports the cached copy's date, which is
+     the fastest way to tell a stale page from a fix that did not work. */
+  (function(){
+    var el = $('verStamp'); if(!el) return;
+    var d = new Date(document.lastModified);
+    el.textContent = isNaN(d) ? 'build ?' :
+      'build ' + d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
+      d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  })();
+
   function stamp(){
     var el = $('freshPill'); if(!el) return;
     if(!lastPull){ el.textContent = '\u2014'; return; }
