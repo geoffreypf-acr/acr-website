@@ -152,6 +152,7 @@
   .chip.fnum.n1 { color: #4FCB8B; border-color: rgba(31,138,91,.45); background: rgba(31,138,91,.12); }
   .chip.fnum.n2 { color: var(--warn-400); border-color: rgba(223,174,78,.45); background: var(--warn-soft); }
   .chip.fnum.n3 { color: var(--alert-400); border-color: rgba(224,105,91,.5); background: var(--alert-soft); }
+  .chip.age { color: var(--text-muted); border-color: var(--border-subtle); }
   .chip.inv { color: #C98A5E; border-color: rgba(201,138,94,.4); }
   .chip.pref { color: var(--secure-400); border-color: rgba(87,187,223,.4); background: rgba(87,187,223,.1); }
   .crm-btn.del { flex: none; border-color: rgba(224,105,91,.35); color: var(--alert-400); }
@@ -666,6 +667,17 @@ window.__crmStart = function(){
     return templatesFor(e).filter(function(t){ return t.id===id; })[0];
   }
 
+  /* How long since anything happened to this record. "Updated" once the sheet has
+     an updated column; until then, when it arrived - which is still the useful
+     number on a card that has been sitting in New for a fortnight. */
+  function ageChip(e){
+    var upd = e.updated ? new Date(e.updated) : null;
+    if(upd && !isNaN(upd)) return { text: 'updated ' + ago(upd), title: 'Last changed ' + upd.toLocaleString('en-GB') };
+    var made = e.timestamp ? new Date(e.timestamp) : null;
+    if(made && !isNaN(made)) return { text: ago(made), title: 'Came in ' + made.toLocaleString('en-GB') };
+    return null;
+  }
+
   /* Follow up from the card: the same wording as the drawer's Follow-up template,
      on whichever channels this record actually has. Email is Gmail (or the Gmail
      app on a phone), so it never lands in a mail client signed in as someone else.
@@ -760,6 +772,16 @@ window.__crmStart = function(){
     if(isNaN(d)) return '';
     return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
          + ', ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
+  /* Plain-English age, used by the cards and the toolbar stamp. */
+  function ago(d){
+    var s = Math.floor((Date.now() - d.getTime())/1000);
+    if(s < 45)   return 'just now';
+    if(s < 90)   return 'a minute ago';
+    if(s < 3600) return Math.round(s/60) + ' min ago';
+    if(s < 5400) return 'an hour ago';
+    if(s < 86400) return Math.round(s/3600) + ' hours ago';
+    return Math.round(s/86400) + ' days ago';
   }
   function money(n){ return '£'+n.toLocaleString('en-GB'); }
   function fmtD(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
@@ -1085,6 +1107,7 @@ window.__crmStart = function(){
         var iv=(e.invoiceRef||'').toString().trim();
         if(iv) chips.push('<span class="chip inv">'+esc(iv)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
+        var age=ageChip(e); if(age) chips.push('<span class="chip age" title="'+esc(age.title)+'">'+esc(age.text)+'</span>');
         var ch=channelOf(e), pcv=prefContact(e);
         /* don't print the same word twice - a phone lead replied to by phone
            was showing "Phone" as both the channel and the preferred reply */
@@ -1164,6 +1187,16 @@ window.__crmStart = function(){
   // Optimistic write-back (no-cors, can't read response)
   function save(key, fields){
     if(!SHEET_ENDPOINT) return;
+    /* Stamp every write so a card can say when the record last changed. Apps
+       Script only writes fields whose column already exists, so this is harmless
+       until an "updated" header is added to the sheet - and works the moment it
+       is, with no code change. */
+    fields = fields || {};
+    if(!fields.hasOwnProperty('updated')) fields.updated = new Date().toISOString();
+    /* Keep the in-memory copy in step, so the board reflects it before the next pull. */
+    for(var i=0;i<data.length;i++){
+      if(String(data[i].timestamp)===String(key)){ data[i].updated = fields.updated; break; }
+    }
     try{ fetch(SHEET_ENDPOINT, {method:'POST', mode:'no-cors', keepalive:true, headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'updateEnquiry', key:key, fields:fields})}).catch(function(){}); }catch(e){}
   }
 
@@ -1356,15 +1389,6 @@ window.__crmStart = function(){
      it? Without this there is no way to tell a quiet morning from a sync that
      stopped hours ago - which is exactly the failure this CRM exists to catch. */
   var lastPull = null;
-  function ago(d){
-    var s = Math.floor((Date.now() - d.getTime())/1000);
-    if(s < 45)   return 'just now';
-    if(s < 90)   return 'a minute ago';
-    if(s < 3600) return Math.round(s/60) + ' min ago';
-    if(s < 5400) return 'an hour ago';
-    if(s < 86400) return Math.round(s/3600) + ' hours ago';
-    return Math.round(s/86400) + ' days ago';
-  }
   function stamp(){
     var el = $('freshPill'); if(!el) return;
     if(!lastPull){ el.textContent = '\u2014'; return; }
