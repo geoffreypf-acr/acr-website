@@ -79,7 +79,7 @@
   @media (max-width: 900px) { .bk-grid { display: flex; flex-direction: column; } .bk-preview { position: static; } .bk-fields { grid-template-columns: 1fr; } .formCol { order: 1; } .bk-preview { order: 2; } }
   .bk-card, .bk-fields, .formCol, .bk-preview { min-width: 0; }
   .bk-fields input, .bk-fields select, .bk-fields textarea { max-width: 100%; }
-  @media (max-width: 560px) {
+  @media (max-width: 620px) {
     .bk-shell { padding: 16px 14px 60px; }
     .bk-head { gap: 12px; padding: 14px 0 18px; margin-bottom: 20px; flex-wrap: wrap; }
     .bk-head img { height: 22px; }
@@ -98,6 +98,23 @@
     .bk-head .tag { display: none; }
     .bk-head img { height: 22px; }
     .bk-card { padding: 16px 14px; }
+    /* Everything below is about one thing: nothing may be wider than the phone.
+       Each of these is a candidate I could not rule out by reading the CSS, so
+       they are all constrained rather than guessed between. */
+    .bk-shell, .bk-card, .bk-fields, .bk-preview, .formCol { max-width: 100%; min-width: 0; }
+    .bk-fields > * { min-width: 0; }
+    .bk-head img { max-width: 45%; height: auto; }
+    /* A select's natural width comes from its longest option - "Apple CarPlay /
+       Android Auto retrofit" is 37 characters - so it has to be told it may shrink. */
+    .bk-fields select, .bk-fields input, .bk-fields textarea { max-width: 100%; min-width: 0; }
+    /* .btn is nowrap with 30px of padding; several sit in a row. */
+    .savebar { gap: 8px; }
+    .savebar .btn { flex: 1 1 auto; min-width: 0; padding: 0 12px; font-size: 14px; }
+    .bk-head .btn { padding: 0 12px; }
+    .conf { padding: 14px 13px; }
+    /* Last line of defence: if any child still manages to be wider than the phone,
+       it is clipped inside the shell rather than dragging the whole page sideways. */
+    .bk-shell { overflow-x: clip; }
     .field input, .field select { height: 48px; font-size: 16px; } /* 16px prevents iOS zoom-on-focus */
     .field textarea { font-size: 16px; }
     .seg { flex-wrap: wrap; }
