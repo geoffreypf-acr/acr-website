@@ -544,12 +544,37 @@ function tideInvoices_(dryRun) {
         if (String(rows[q][refCol] || '').trim() === inv.ref) { already = q; break; }
       }
       if (already > -1) {
-        if (CFG.TIDE_REFRESH) refresh_(sheet, rows, already, inv, valCol, stCol, refreshed);
+        /* A dry run must never write. This had no guard, and TIDE_REFRESH shipped
+           on - so a "dry" run would have edited the sheet. */
+        if (CFG.TIDE_REFRESH) {
+          if (dryRun) {
+            var wouldVal = valCol > -1 && inv.total && !String(rows[already][valCol] || '').trim();
+            var wouldSt  = stCol > -1 && inv.paid
+                        && ['Completed', 'Lost', 'Archive'].indexOf(String(rows[already][stCol] || '').trim()) < 0;
+            if (wouldVal || wouldSt) {
+              refreshed.n++;
+              Logger.log('  would refresh %s: %s', inv.ref,
+                         [wouldVal ? 'value ' + inv.total : '', wouldSt ? 'paid -> Completed' : '']
+                           .filter(String).join(', '));
+            }
+          } else {
+            refresh_(sheet, rows, already, inv, valCol, stCol, refreshed);
+          }
+        }
         skipped++; return;
       }
     }
     var m    = matchRow_(rows, inv, nameCol, mailCol, mobCol);
     var hit  = m.i;
+
+    /* The row matched, but it already carries a DIFFERENT invoice - so it is
+       another job's record. One invoice is one job, so this one needs a row of
+       its own rather than displacing what is there. Stuart Anning's two invoices
+       are the case in point: INV-0079 matched the INV-0114 row on email. */
+    if (hit > -1 && refCol > -1 && inv.ref) {
+      var haveRef = String(rows[hit][refCol] || '').trim();
+      if (haveRef && haveRef !== inv.ref) { m.occupied = haveRef; hit = -1; }
+    }
 
     if (dryRun && CFG.TIDE_DEBUG && shown < CFG.TIDE_DEBUG_MAX) {
       shown++;
@@ -564,6 +589,7 @@ function tideInvoices_(dryRun) {
     if (hit < 0) {
       unmatched.push((inv.ref || '(no number)') + ' - '
                      + (inv.name ? inv.name + ' <' + (inv.email || '?') + '>' : (inv.email || subject)).slice(0, 70)
+                     + (m.occupied ? '   [separate job - their other row holds ' + m.occupied + ']' : '')
                      + (m.near && m.near.length ? '   [same first name on the board: ' + m.near.join(', ') + ']' : ''));
       /* An invoice with no record means a paying customer who is not on the board
          at all. Optionally put them there rather than losing them. */
@@ -599,18 +625,22 @@ function tideInvoices_(dryRun) {
       attached++;
       return;
     }
-    if (refCol  > -1) sheet.getRange(hit + 2, refCol + 1).setValue(inv.ref || '');
-    if (linkCol > -1) sheet.getRange(hit + 2, linkCol + 1).setValue(link);
+    if (refCol  > -1) { sheet.getRange(hit + 2, refCol + 1).setValue(inv.ref || ''); rows[hit][refCol] = inv.ref || ''; }
+    if (linkCol > -1) { sheet.getRange(hit + 2, linkCol + 1).setValue(link); rows[hit][linkCol] = link; }
     /* The invoice total is the value of the job, and the dashboard reads that
        column. Only fill it when empty - never overwrite a figure set by hand. */
     if (valCol > -1 && inv.total && !String(rows[hit][valCol] || '').trim()) {
-      sheet.getRange(hit + 2, valCol + 1).setValue(inv.total.replace(/[^\d.]/g, ''));
+      var vNum = inv.total.replace(/[^\d.]/g, '');
+      sheet.getRange(hit + 2, valCol + 1).setValue(vNum);
+      rows[hit][valCol] = vNum;
     }
     if (CFG.TIDE_SET_STATUS && stCol > -1) {
       var cur = String(rows[hit][stCol] || '').trim();
       /* never drag a finished job backwards */
       if (cur !== 'Completed' && cur !== 'Lost' && cur !== 'Archive') {
-        sheet.getRange(hit + 2, stCol + 1).setValue(inv.paid ? 'Completed' : CFG.TIDE_SET_STATUS);
+        var nextSt = inv.paid ? 'Completed' : CFG.TIDE_SET_STATUS;
+        sheet.getRange(hit + 2, stCol + 1).setValue(nextSt);
+        rows[hit][stCol] = nextSt;
       }
     }
     Logger.log('Attached %s to %s (matched on %s)', inv.ref || '(no number)', who, m.how);
@@ -665,7 +695,11 @@ function parseInvoice_(subject, body) {
      capitalised, so do not require it to be. */
   var nm = hay.match(/\bHi\s+([A-Z][\w'\u2019.-]*(?:\s+[\w'\u2019.-]+){0,3})\s*,/)
         || hay.match(/(?:invoice[^\n]{0,40}?\b(?:for|to)\s+)([A-Z][\w'\u2019-]+(?:\s+[A-Z][\w'\u2019-]+){1,3})/);
-  var phones = (hay.match(/(?:\+44\s?|0)7\d{3}[\s-]?\d{3}[\s-]?\d{3}/g) || []);
+  var phones = (hay.match(/(?:\+44\s?|0)7\d{3}[\s-]?\d{3}[\s-]?\d{3}/g) || []).filter(function (n) {
+    /* Tide's footer carries our own number - matching on it would file an invoice
+       against whoever happens to have it on their record. */
+    return !CFG.OWN_NUMBERS.some(function (o) { return digits_(o) === digits_(n); });
+  });
   return {
     phones: phones,
     /* Only call it INV-nnnn when the email actually said INV; otherwise keep the
@@ -715,13 +749,16 @@ function firstOutsideEmail_(text) {
 function refresh_(sheet, rows, i, inv, valCol, stCol, tally) {
   var did = [];
   if (valCol > -1 && inv.total && !String(rows[i][valCol] || '').trim()) {
-    sheet.getRange(i + 2, valCol + 1).setValue(inv.total.replace(/[^\d.]/g, ''));
+    var v = inv.total.replace(/[^\d.]/g, '');
+    sheet.getRange(i + 2, valCol + 1).setValue(v);
+    rows[i][valCol] = v;
     did.push('value ' + inv.total);
   }
   if (stCol > -1 && inv.paid) {
     var cur = String(rows[i][stCol] || '').trim();
     if (cur !== 'Completed' && cur !== 'Lost' && cur !== 'Archive') {
       sheet.getRange(i + 2, stCol + 1).setValue('Completed');
+      rows[i][stCol] = 'Completed';
       did.push('paid -> Completed');
     }
   }
@@ -779,6 +816,9 @@ function matchRow_(rows, inv, nameCol, mailCol, mobCol) {
   }
 
   var want = normName_(inv.name);
+  /* Too short to be evidence of anything: a record named "A" or "Jo" would match
+     half the invoices Tide sends. */
+  if (want.length < 5) want = '';
   if (want && nameCol > -1) {
     var wantIS = initialSurname_(want);
     for (i = 0; i < rows.length; i++) {

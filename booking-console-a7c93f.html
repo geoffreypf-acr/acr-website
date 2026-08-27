@@ -22,6 +22,10 @@
   .bk-card h3 { font-family: var(--font-display); font-weight: 400; font-size: 20px; letter-spacing: .02em; margin: 0 0 4px; }
   .bk-card .hint { color: var(--text-muted); font-size: 12.5px; margin: 0 0 18px; line-height: 1.5; }
   .bk-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px 16px; }
+  /* Title / first name / surname across the full width, so none is squashed. */
+  .bk-name { grid-column: 1 / -1; display: grid; grid-template-columns: 108px 1fr 1fr; gap: 12px; align-items: end; }
+  .bk-name > .field { min-width: 0; }
+  @media (max-width: 640px) { .bk-name { grid-template-columns: 1fr; } }
   .field.full { grid-column: 1 / -1; }
   .field { display: flex; flex-direction: column; gap: 7px; }
   .field label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
@@ -150,8 +154,14 @@
         <h3>Customer</h3>
         <p class="hint">The name and email are used on the calendar invite and confirmation email.</p>
         <div class="bk-fields">
-          <div class="field"><label>Full name <span class="req">*</span></label><input id="cName" placeholder="e.g. James Whitmore"></div>
-          <div class="field"><label>Email <span class="req">*</span></label><input id="cEmail" type="email" placeholder="name@email.com"></div>
+          <div class="field bk-name">
+            <div class="field"><label>Title <span class="req">*</span></label>
+              <select id="cTitle"><option value="">Title</option><option>Mr</option><option>Mrs</option><option>Ms</option><option>Miss</option><option>Mx</option><option>Dr</option><option>Prof</option></select></div>
+            <div class="field"><label>First name <span class="req">*</span></label><input id="cFirst" placeholder="James"></div>
+            <div class="field"><label>Surname <span class="req">*</span></label><input id="cLast" placeholder="Whitmore"></div>
+          </div>
+          <input id="cName" type="hidden">
+          <div class="field full"><label>Email <span class="req">*</span></label><input id="cEmail" type="email" placeholder="name@email.com"></div>
           <div class="field full"><label>Phone</label><input id="cPhone" type="tel" placeholder="+44…"></div>
         </div>
       </div>
@@ -269,7 +279,7 @@
   // default date = tomorrow
   (function(){ var d = new Date(); d.setDate(d.getDate()+1); $('date').value = d.toISOString().slice(0,10); })();
 
-  var ids = ['cName','cEmail','cPhone','vMake','vModel','vYear','vReg','service','serviceOther','date','time','addr','price','deposit','invoice','notes'];
+  var ids = ['cName','cTitle','cFirst','cLast','cEmail','cPhone','vMake','vModel','vYear','vReg','service','serviceOther','date','time','addr','price','deposit','invoice','notes'];
   ids.forEach(function(id){ var el=$(id); if(el){ el.addEventListener('input', render); el.addEventListener('change', render); } });
   document.querySelectorAll('input[name=dur],input[name=loc]').forEach(function(el){ el.addEventListener('change', render); });
   $('cPhone').addEventListener('blur', function(){ if(this.value.trim()){ this.value=ukPhone(this.value); render(); } });
@@ -312,7 +322,9 @@
   function emailBody(){
     var s=startDate(), e=endDate();
     var L=[];
-    L.push('Hi '+(val('cName').split(' ')[0]||val('cName'))+',');
+    /* First name only. Taking the first word of the full name greeted people as
+       "Hi Mr," once titles were collected. */
+    L.push('Hi '+(val('cFirst')||splitName(val('cName')).first||val('cName'))+',');
     L.push('');
     L.push('Your appointment with '+BIZ.name+' is confirmed:');
     L.push('');
@@ -537,9 +549,38 @@
     a.style.cssText='display:inline-block;margin-top:7px;font-size:12.5px;color:var(--signal-300);text-decoration:none';
     wrap.appendChild(a);
   }
+  /* cName is what the preview, calendar invite, email and saved bookings read, so
+     it is rebuilt from the three fields on every keystroke. */
+  function syncName(){
+    var t=val('cTitle'), f=val('cFirst'), l=val('cLast');
+    var full=[t,f,l].filter(Boolean).join(' ');
+    if($('cName')) $('cName').value = full;
+    return full;
+  }
+  ['cTitle','cFirst','cLast'].forEach(function(id){
+    var el=$(id); if(!el) return;
+    el.addEventListener('input', function(){ syncName(); render(); });
+    el.addEventListener('change', function(){ syncName(); render(); });
+  });
+
+  /* "Mr Anthony Williams" -> title / first / surname, for details arriving from
+     the CRM as one name. */
+  function splitName(full){
+    var bits=String(full||'').trim().split(/\s+/).filter(Boolean);
+    var t='';
+    if(bits.length && /^(mr|mrs|ms|miss|mx|dr|prof)\.?$/i.test(bits[0])) t=bits.shift().replace(/\.$/,'');
+    return { title:t, first:bits.shift()||'', last:bits.join(' ') };
+  }
+
   function useEnquiry(e){
-    $('cName').value=e.name||''; $('cEmail').value=e.email||''; $('cPhone').value=ukPhone(e.mobile||e.phone||'');
+    var nm = splitName(e.name||'');
+    if($('cTitle')) $('cTitle').value = e.title || nm.title || '';
+    if($('cFirst')) $('cFirst').value = e.first || nm.first || '';
+    if($('cLast'))  $('cLast').value  = e.surname || nm.last || '';
+    syncName();
+    $('cEmail').value=e.email||''; $('cPhone').value=ukPhone(e.mobile||e.phone||'');
     $('vMake').value=e.make||''; $('vModel').value=e.model||''; $('vReg').value=e.registration||e.reg||'';
+    if($('vYear')) $('vYear').value = e.year || '';
     var svc = mapService(e.service||e.interested||e.interestedIn||'');
     if(svc){ $('service').value=svc; } else { $('service').value='__other'; $('serviceOther').value=(e.service||e.interested||e.interestedIn||''); }
     $('otherWrap').style.display = $('service').value==='__other' ? '' : 'none';
@@ -558,7 +599,11 @@
     try{
       var p = new URLSearchParams(location.hash.slice(1));
       if(!p.get('name') && !p.get('email')) return;
-      useEnquiry({ name:p.get('name')||'', email:p.get('email')||'', mobile:p.get('phone')||'', make:p.get('make')||'', model:p.get('model')||'', service:p.get('service')||'',
+      useEnquiry({ name:p.get('name')||'', title:p.get('title')||'', first:p.get('first')||'', surname:p.get('surname')||'',
+                   email:p.get('email')||'', mobile:p.get('phone')||'',
+                   make:p.get('make')||'', model:p.get('model')||'', year:p.get('year')||'',
+                   registration:p.get('reg')||'', postcode:p.get('postcode')||'',
+                   service:p.get('service')||'',
                    invoice:p.get('invoice')||'', invoiceLink:p.get('invoiceLink')||'' });
     }catch(_){}
   })();

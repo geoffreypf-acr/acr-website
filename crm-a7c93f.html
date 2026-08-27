@@ -587,9 +587,15 @@ window.__crmStart = function(){
      Used by the drawer's "Book this" and by the Book button on each card, so the
      two cannot drift apart. */
   function bookHref(e){
+    /* Everything the record holds that the booking form asks for. Year and
+       registration were missing, so those boxes sat empty on a record that had
+       them. */
     var p = new URLSearchParams({
       name: nameOf(e), email: e.email||'', phone: e.mobile||'',
-      make: e.make||'', model: e.model||'', service: serviceLabel(e),
+      make: e.make||'', model: e.model||'', year: (e.year||'').toString().trim(),
+      reg: (e.registration||'').toString().trim(),
+      postcode: (e.postcode||'').toString().trim(),
+      service: serviceLabel(e),
       invoice: (e.invoiceRef||'').toString().trim(),          /* filed by the Tide sync */
       invoiceLink: (e.invoiceLink||'').toString().trim()
     });
