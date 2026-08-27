@@ -27,20 +27,26 @@
      space it actually has, not on what a media query was told the width is. A
      phone in "Request Desktop Website" mode reports ~980px, which is how this
      page ended up two columns on a handset. */
-  .bk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 30px; align-items: start; }
-  .formCol { grid-area: form; }
+  .bk-grid { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+  /* Two columns while there is room for both, one when there is not - decided by
+     the space available, not by a media query, so a phone in desktop mode gets
+     the same treatment. 1.15/.85 keeps the original proportion. */
+  /* Capped, or at around 900px the form column gets wide enough for three
+     columns of short fields, which reads as a mess. 720px keeps it to two. */
+  .formCol { flex: 1.15 1 520px; min-width: 0; max-width: 720px; }
+  .bk-preview { flex: .85 1 340px; min-width: 0; }
 
   .bk-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 24px; }
   .bk-card + .bk-card { margin-top: 22px; }
   .bk-card h3 { font-family: var(--font-display); font-weight: 400; font-size: 20px; letter-spacing: .02em; margin: 0 0 4px; }
   .bk-card .hint { color: var(--text-muted); font-size: 12.5px; margin: 0 0 18px; line-height: 1.5; }
-  .bk-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 15px 16px; }
+  .bk-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 15px 16px; }
   /* Title / first name / surname across the full width, so none is squashed. */
   /* Title / First name / Surname across the full width. The selector is
      .bk-fields .bk-name, not .bk-name: on one class it tied with .field, which is
      declared later and set display:flex, so the grid never applied at all. */
   .bk-fields .bk-name { grid-column: 1 / -1; display: grid;
-    grid-template-columns: minmax(88px, 104px) repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+    grid-template-columns: minmax(88px, 104px) minmax(0, 1fr) minmax(0, 1fr);
     gap: 12px; align-items: end; min-width: 0; }
   .bk-fields .bk-name > .field { min-width: 0; }
   @media (max-width: 700px) { .bk-fields .bk-name { grid-template-columns: 1fr; } }
