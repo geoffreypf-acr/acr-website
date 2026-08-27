@@ -56,6 +56,23 @@
   .field label .req { color: var(--signal-300); }
   .field input, .field select, .field textarea { height: 46px; padding: 0 13px; width: 100%; min-width: 0; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 14.5px; }
   .field textarea { height: auto; min-height: 76px; padding: 11px 13px; line-height: 1.5; resize: vertical; }
+  /* Date and time inputs carry a native widget inside them and do not honour
+     width:100% the way a text input does - which is why the value sat outside the
+     field. appearance:none hands the sizing back to us; the padding-right leaves
+     room for the picker glyph that remains. */
+  .field input[type="date"], .field input[type="time"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; max-width: 100%; min-width: 0;
+    padding: 0 10px 0 13px;
+    line-height: normal;
+  }
+  /* Safari puts its own margins on the inner fields; Chrome adds a calendar button. */
+  .field input[type="date"]::-webkit-date-and-time-value,
+  .field input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+  .field input[type="date"]::-webkit-datetime-edit,
+  .field input[type="time"]::-webkit-datetime-edit { padding: 0; }
+  .field input[type="date"]::-webkit-calendar-picker-indicator,
+  .field input[type="time"]::-webkit-calendar-picker-indicator { margin-left: 4px; opacity: .6; cursor: pointer; }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--signal-500); box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 0 0 3px var(--accent-soft); }
   .field input::placeholder, .field textarea::placeholder { color: var(--text-muted); }
   .seg { display: flex; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
@@ -130,6 +147,7 @@
        it is clipped inside the shell rather than dragging the whole page sideways. */
     .bk-shell { overflow-x: clip; }
     .field input, .field select { height: 48px; font-size: 16px; } /* 16px prevents iOS zoom-on-focus */
+    .field input[type="date"], .field input[type="time"] { height: 50px; padding: 0 8px 0 11px; }
     .field textarea { font-size: 16px; }
     .seg { flex-wrap: wrap; }
     .seg label { flex: 1 0 30%; }
