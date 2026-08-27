@@ -76,7 +76,7 @@
   .field input[type="time"]::-webkit-calendar-picker-indicator { margin-left: 4px; opacity: .6; cursor: pointer; }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--signal-500); box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 0 0 3px var(--accent-soft); }
   .field input::placeholder, .field textarea::placeholder { color: var(--text-muted); }
-  .seg { display: flex; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
+  .seg { display: flex; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; position: relative; }
   .seg label { flex: 1; }
   .seg input { position: absolute; opacity: 0; pointer-events: none; }
   .seg .opt { display: block; text-align: center; padding: 12px 8px; font-size: 13.5px; color: var(--text-secondary); cursor: pointer; border-right: 1px solid var(--border-default); transition: background .15s, color .15s; }
