@@ -152,6 +152,7 @@
   .chip.fnum.n1 { color: #4FCB8B; border-color: rgba(31,138,91,.45); background: rgba(31,138,91,.12); }
   .chip.fnum.n2 { color: var(--warn-400); border-color: rgba(223,174,78,.45); background: var(--warn-soft); }
   .chip.fnum.n3 { color: var(--alert-400); border-color: rgba(224,105,91,.5); background: var(--alert-soft); }
+  .chip.chase { color: var(--warn-400, #DFAE4E); border-color: rgba(223,174,78,.35); }
   .chip.age { color: var(--text-muted); border-color: var(--border-subtle); }
   .chip.inv { color: #C98A5E; border-color: rgba(201,138,94,.4); }
   .chip.pref { color: var(--secure-400); border-color: rgba(87,187,223,.4); background: rgba(87,187,223,.1); }
@@ -667,6 +668,15 @@ window.__crmStart = function(){
     return templatesFor(e).filter(function(t){ return t.id===id; })[0];
   }
 
+  /* When this record was last chased. Separate from the count on purpose: three
+     chases in one afternoon and three over three months need different handling,
+     and the count alone cannot tell you which you are looking at. */
+  function chasedChip(e){
+    var d = e.chasedAt ? new Date(e.chasedAt) : null;
+    if(!d || isNaN(d)) return null;
+    return { text: 'chased ' + ago(d), title: 'Last chased ' + d.toLocaleString('en-GB') };
+  }
+
   /* How long since anything happened to this record. "Updated" once the sheet has
      an updated column; until then, when it arrived - which is still the useful
      number on a card that has been sitting in New for a fortnight. */
@@ -719,14 +729,22 @@ window.__crmStart = function(){
     document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
   });
 
-  /* One more chase recorded, capped at 3 - the same scale the drawer uses. */
-  function bumpFollowUp(e){
-    var n = fnum(e) + 1;
-    if(n > 3) n = 3;
-    e.followups = n;
-    save(e.timestamp, { followups: n });
+  /* One more chase recorded, capped at 3 - the same scale the drawer uses - and
+     the time it happened, because "chased twice" is not much use without knowing
+     whether the last one was yesterday or a month ago. */
+  function markChased(e, countsAsChase){
+    var f = { chasedAt: new Date().toISOString() };
+    if(countsAsChase){
+      var n = fnum(e) + 1;
+      if(n > 3) n = 3;
+      e.followups = n;
+      f.followups = n;
+    }
+    e.chasedAt = f.chasedAt;
+    save(e.timestamp, f);
     render();
   }
+  function bumpFollowUp(e){ markChased(e, true); }
 
   /* Straight into the booking console with the job's details already filled in.
      Used by the drawer's "Book this" and by the Book button on each card, so the
@@ -1102,6 +1120,7 @@ window.__crmStart = function(){
         card.draggable=true; card.dataset.key=e.timestamp;
         var chips=[];
         var fn=fnum(e); if(fn) chips.push('<span class="chip fnum n'+fn+'">Follow-up '+fn+'</span>');
+        var ch=chasedChip(e); if(ch) chips.push('<span class="chip chase" title="'+esc(ch.title)+'">'+esc(ch.text)+'</span>');
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
         var iv=(e.invoiceRef||'').toString().trim();
@@ -1225,6 +1244,11 @@ window.__crmStart = function(){
         ? '<a class="gm" href="'+esc(invLink)+'" target="_blank" rel="noopener">'+esc(invRef||'open in Gmail')+'</a>'
         : esc(invRef)));
     }
+    var chAt = e.chasedAt ? new Date(e.chasedAt) : null;
+    if(chAt && !isNaN(chAt)){
+      info.push('<b>Last chased:</b> ' + esc(chAt.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))
+                + ' <span style="color:var(--text-muted)">(' + esc(ago(chAt)) + ')</span>');
+    }
     if(e.timestamp){ var d=new Date(e.timestamp); if(!isNaN(d)) info.push('<b>Enquired:</b> '+d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})); }
     $('dInfo').innerHTML = info.join('<br>') || 'No contact details captured.';
     $('dInfo').querySelectorAll('button[data-copy]').forEach(function(b){
@@ -1274,18 +1298,26 @@ window.__crmStart = function(){
       box.style.display='block';
       var html = '<div class="tpl-lab">Quick messages</div>';
       TPL.forEach(function(t){
+        /* follow / close / missed are chases; review and decline are not */
+        var ch = /^(follow|close|missed)$/.test(t.id) ? ' data-chase="1"' : '';
         html += '<div class="tpl-row"><span class="tpl-name">'+t.label+'</span>';
-        if(digits) html += '<a class="wa" target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>'
-                        +  '<a href="sms:+'+digits+'&body='+encodeURIComponent(chatBody(t))+'">SMS</a>';
+        if(digits) html += '<a class="wa"'+ch+' target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>'
+                        +  '<a'+ch+' href="sms:+'+digits+'&body='+encodeURIComponent(chatBody(t))+'">SMS</a>';
         /* The address must NOT be percent-encoded: mailto:alex%40x.com is rejected
            by desktop mail clients, which is why the Email link worked on a phone
            and did nothing on a computer. Gmail is listed first because it works
            whether or not a mail client is set up on the machine. */
-        if(mail)   html += '<a class="gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>'
+        if(mail)   html += '<a class="gm"'+ch+' target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>'
                         +  '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(mailBody(t))+'">Mail app</a>';
         html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
       });
       box.innerHTML = html;
+      /* Sending a chasing message from the drawer is the same act as using the
+         card's Follow up button, so it stamps the time the same way. A review
+         request or a decline is not a chase, so those do not. */
+      box.querySelectorAll('a[data-chase]').forEach(function(a){
+        a.addEventListener('click', function(){ markChased(e, false); });
+      });
       box.querySelectorAll('button[data-tpl]').forEach(function(b){
         b.addEventListener('click', function(){
           var t = TPL.filter(function(x){ return x.id===b.getAttribute('data-tpl'); })[0];
