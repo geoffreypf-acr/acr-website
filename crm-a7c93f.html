@@ -48,8 +48,6 @@
   button.pill { cursor: pointer; font: inherit; }
   button.pill:disabled { cursor: default; }
   .pill.on { background: var(--alert-soft, rgba(224,105,91,.14)); border-color: var(--alert-400, #E0695B); color: var(--alert-400, #E0695B); }
-  .pill.stamp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0; opacity: .8; }
-  .pill.stamp.stale { color: var(--alert-400, #E0695B); border-color: rgba(224,105,91,.45); opacity: 1; }
   .pill.zero { background: var(--surface-inset); border-color: var(--border-default); color: var(--text-muted); }
 
   /* ---- Dashboard ---- */
@@ -120,6 +118,8 @@
   .card .fu-btn { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border-default);
     background: var(--surface-inset); color: var(--text-secondary); font-family: var(--font-body);
     font-size: 11.5px; font-weight: 600; cursor: pointer; }
+  .card .fu-btn.final { color: var(--alert-400, #E0695B); border-color: rgba(224,105,91,.4); }
+  .card .fu-btn.final:hover { background: var(--alert-soft, rgba(224,105,91,.12)); color: var(--alert-400, #E0695B); }
   .card .fu-btn:hover { border-color: var(--signal-500); color: var(--text-primary); background: var(--accent-soft); }
   .card .fu-menu { position: absolute; top: calc(100% + 5px); left: 0; z-index: 40; display: flex; flex-direction: column;
     min-width: 118px; padding: 5px; gap: 3px; border-radius: 10px; border: 1px solid var(--border-strong);
@@ -333,8 +333,7 @@
     <div class="spacer"></div>
     <input class="crm-search" id="search" placeholder="Search name, vehicle, service…">
     <button type="button" class="pill zero" id="fuPill" title="Show only records whose follow-up date has passed">0 follow-ups due</button>
-    <span class="pill stamp" id="freshPill" title="When the board last pulled data, and the newest record on it">—</span>
-    <span class="pill stamp" id="verStamp" title="When the page you are looking at was built. Not today's date? The browser is showing a cached copy - hard-refresh.">…</span>
+
     <button class="crm-btn" id="dashToggle">Dashboard</button>
     <button class="crm-btn" id="selBtn" title="Select several records and move them together">Select</button>
     <button class="crm-btn" id="binBtn" title="Records you have deleted - restore any of them">Deleted</button>
@@ -787,7 +786,7 @@ window.__crmStart = function(){
      on whichever channels this record actually has. Email is Gmail (or the Gmail
      app on a phone), so it never lands in a mail client signed in as someone else.
      Sending also ticks the follow-up counter, which is what that number is for. */
-  function cardMenu(e, tplId, label){
+  function cardMenu(e, tplId, label, alsoLost){
     var digits = e.mobile ? ukPhone(e.mobile).replace(/\D/g,'') : '';
     var mail   = (e.email||'').toString().trim();
     if(!digits && !mail) return '';
@@ -795,13 +794,19 @@ window.__crmStart = function(){
     var items = '';
     if(mail)   items += '<a class="fu-item gm" target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Email</a>';
     if(digits) items += '<a class="fu-item wa" target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>';
-    return '<span class="fu-wrap" data-tpl="'+tplId+'">'
-         +   '<button type="button" class="fu-btn">'+label+' \u25be</button>'
+    return '<span class="fu-wrap" data-tpl="'+tplId+'"'+(alsoLost?' data-lost="1"':'')+'>'
+         +   '<button type="button" class="fu-btn'+(alsoLost?' final':'')+'">'+label+' \u25be</button>'
          +   '<span class="fu-menu" hidden>'+items+'</span>'
          + '</span>';
   }
   function followUpMenu(e){ return cardMenu(e, 'follow', 'Follow up'); }
-  function closeMenu(e){ return cardMenu(e, 'close', 'Close'); }
+  /* Three chases is where a lead stops being worth chasing. At that point the
+     Close button also closes the record: it sends the closing request and moves it
+     to Lost, so the board does not fill up with leads nobody will return to. */
+  function closeMenu(e){
+    return fnum(e) >= 3 ? cardMenu(e, 'close', 'Close &amp; Lost', true)
+                        : cardMenu(e, 'close', 'Close');
+  }
 
   function wireFollowUp(card, e){
     card.querySelectorAll('.fu-wrap').forEach(function(wrap){
@@ -814,10 +819,24 @@ window.__crmStart = function(){
         document.querySelectorAll('.fu-menu').forEach(function(m){ m.hidden = true; });
         menu.hidden = open;
       });
+      var alsoLost = wrap.getAttribute('data-lost') === '1';
       menu.querySelectorAll('a').forEach(function(a){
         a.addEventListener('click', function(ev){
           ev.stopPropagation();
           menu.hidden = true;
+          if(alsoLost){
+            /* The message goes out and the record closes in one action, with the
+               old stage kept so the toast can put it back. */
+            var was = e.status || '';
+            markChased(e, false);
+            e.status = 'Lost';
+            save(e.timestamp, { status: 'Lost' });
+            render();
+            showToast(nameOf(e) + ' closed and marked Lost', function(){
+              e.status = was; save(e.timestamp, { status: was }); render();
+            });
+            return;
+          }
           bumpFollowUp(e);
         });
       });
@@ -1538,38 +1557,6 @@ window.__crmStart = function(){
   /* Google occasionally returns an error page instead of the data - usually a
      brief hiccup after a burst of writes. Retry a couple of times before
      giving up, and never leave the page blank without saying why. */
-  /* When did the board last hear from the sheet, and what is the newest thing on
-     it? Without this there is no way to tell a quiet morning from a sync that
-     stopped hours ago - which is exactly the failure this CRM exists to catch. */
-  var lastPull = null;
-  /* Which build is loaded. A cached page reports the cached copy's date, which is
-     the fastest way to tell a stale page from a fix that did not work. */
-  (function(){
-    var el = $('verStamp'); if(!el) return;
-    var d = new Date(document.lastModified);
-    el.textContent = isNaN(d) ? 'build ?' :
-      'build ' + d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' +
-      d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  })();
-
-  function stamp(){
-    var el = $('freshPill'); if(!el) return;
-    if(!lastPull){ el.textContent = '\u2014'; return; }
-    var bits = ['Updated ' + ago(lastPull)];
-    /* The newest record matters as much as the pull: a fresh pull that found
-       nothing new for two days is worth noticing. */
-    var newest = null;
-    data.forEach(function(e){
-      if(isDeleted(e) || !e.timestamp) return;
-      var d = new Date(e.timestamp);
-      if(!isNaN(d) && (!newest || d > newest)) newest = d;
-    });
-    if(newest) bits.push('newest ' + ago(newest));
-    el.textContent = bits.join(' \u00b7 ');
-    el.classList.toggle('stale', (Date.now() - lastPull.getTime()) > 2*3600*1000);
-  }
-  setInterval(stamp, 30000);
-
   function load(attempt){
     attempt = attempt || 1;
     $('refresh').textContent = attempt>1 ? ('Retrying '+attempt+'/3…') : 'Loading…';
@@ -1586,9 +1573,7 @@ window.__crmStart = function(){
         data = list.filter(function(e){ return e.timestamp || e.name || e.email; });
         $('banner').style.display='none';
         $('refresh').textContent='Refresh';
-        lastPull = new Date();
         render();
-        stamp();
       })
       .catch(function(err){
         if(attempt < 3){
