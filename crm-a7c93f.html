@@ -170,6 +170,9 @@
   .chip.fnum.n3 { color: var(--alert-400); border-color: rgba(224,105,91,.5); background: var(--alert-soft); }
   .chip.chase { color: var(--warn-400, #DFAE4E); border-color: rgba(223,174,78,.35); }
   .chip.age { color: var(--text-muted); border-color: var(--border-subtle); }
+  .chip.dep.tog { cursor: pointer; font-family: var(--font-mono); }
+  .chip.dep.tog:not(.on) { color: var(--text-muted); border-color: var(--border-subtle); background: var(--surface-inset); }
+  .chip.dep.tog:not(.on):hover { border-color: #4FA3A5; color: #4FA3A5; }
   .chip.dep { color: #4FA3A5; border-color: rgba(79,163,165,.45); background: rgba(79,163,165,.10); }
   .card.hasdep { border-left: 3px solid #4FA3A5; }
   .chip.inv { color: #C98A5E; border-color: rgba(201,138,94,.4); }
@@ -633,6 +636,29 @@ window.__crmStart = function(){
     }
   }
 
+  /* Reply inside the original thread. A compose URL cannot do it: there is no way
+     to set In-Reply-To from a link, so the Gmail quick replies were starting a new
+     conversation each time - same subject, but a separate thread for the customer.
+     Apps Script drafts the reply in the real thread, then we open it so you can
+     read it before sending. Only possible where we have a threadId, which means
+     the enquiries the Gmail sync imported. */
+  function draftReply(e, t, btn){
+    var thread = (e.threadId||'').toString().trim();
+    if(!SHEET_ENDPOINT || !thread) return false;
+    /* The tab must be opened by the click itself, or the popup is blocked. */
+    var win = window.open('', '_blank');
+    try{
+      fetch(SHEET_ENDPOINT, {method:'POST', mode:'no-cors', keepalive:true,
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'replyDraft', threadId: thread, body: mailBody(t) })}).catch(function(){});
+    }catch(err){ if(win) win.close(); return false; }
+    if(btn){ var was = btn.textContent; btn.textContent = 'Drafting\u2026';
+             setTimeout(function(){ btn.textContent = was; }, 2200); }
+    /* Give Apps Script a moment to create the draft before landing on the thread. */
+    setTimeout(function(){ if(win) win.location = gmailThread(thread); }, 1400);
+    return true;
+  }
+
   /* Reply from the ACR inbox, not whatever the device thinks is its mail app.
      mailto: opens Apple Mail on a phone, which is signed in as the wrong
      account; this opens Gmail's composer prefilled instead. Enquiries the Gmail
@@ -790,6 +816,9 @@ window.__crmStart = function(){
      change, and the booking console's note, which records the amount. Returns the
      amount where there is one, or '1' when we only know that there was a deposit. */
   function depositOf(e){
+    /* Set by hand on the card - the one that matters day to day. */
+    var d = (e.deposit||'').toString().trim();
+    if(d && !/^(false|0|no)$/i.test(d)) return /^(true|1|yes)$/i.test(d) ? '1' : d;
     if(/^deposit paid$/i.test((e.status||'').toString().trim())) return '1';
     var hay = [(e.notes||''), (e.details||'')].join(' ');
     var m = hay.match(/\u00a3\s?([\d,]+(?:\.\d{2})?)\s*deposit/i);
@@ -1281,7 +1310,15 @@ window.__crmStart = function(){
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
         var dep=depositOf(e);
-        if(dep) chips.push('<span class="chip dep">Deposit paid'+(dep==='1'?'':' '+esc(dep))+'</span>');
+        /* On a booked job, whether the deposit has landed is the thing you look for
+           - so it is a switch on the card rather than something to open a record
+           for. Elsewhere it is just shown, if it is known. */
+        if(s.key==='Booked' || s.key==='Invoice sent'){
+          chips.push('<button type="button" class="chip dep tog'+(dep?' on':'')+'" data-dep="1">'
+                   + (dep ? 'Deposit paid'+(dep==='1'?'':' '+esc(dep)) : 'Deposit?') + '</button>');
+        } else if(dep){
+          chips.push('<span class="chip dep">Deposit paid'+(dep==='1'?'':' '+esc(dep))+'</span>');
+        }
         var iv=(e.invoiceRef||'').toString().trim();
         if(iv) chips.push('<span class="chip inv">'+esc(iv)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
@@ -1318,6 +1355,14 @@ window.__crmStart = function(){
           el.addEventListener('click', function(ev){ ev.stopPropagation(); });
         });
         wireFollowUp(card, e);
+        var depBtn = card.querySelector('button[data-dep]');
+        if(depBtn) depBtn.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var had = depositOf(e);
+          e.deposit = had ? '' : 'TRUE';
+          save(e.timestamp, { deposit: e.deposit });
+          render();
+        });
         card.addEventListener('dragstart', function(ev){ dragKey=e.timestamp; ev.dataTransfer.effectAllowed='move'; });
         body.appendChild(card);
       });
@@ -1483,20 +1528,33 @@ window.__crmStart = function(){
            by desktop mail clients, which is why the Email link worked on a phone
            and did nothing on a computer. Gmail is listed first because it works
            whether or not a mail client is set up on the machine. */
-        if(mail)   html += '<a class="gm"'+ch+' target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>'
-                        +  '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(mailBody(t))+'">Mail app</a>';
+        /* An enquiry that arrived by email has a thread to reply into; anything else
+           (a call, a website form) has no thread, so it composes as before. */
+        if(mail && (e.threadId||'').toString().trim()){
+          html += '<button type="button" class="gm thr"'+ch+' data-thr="'+t.id+'">Reply in thread</button>';
+        } else if(mail){
+          html += '<a class="gm"'+ch+' target="_blank" rel="noopener" '+gmailLink(mail, t.subject, t.body)+'>Gmail</a>';
+        }
+        if(mail)   html += '<a href="mailto:'+mail.replace(/"/g,'%22')+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(mailBody(t))+'">Mail app</a>';
         html += '<button type="button" data-tpl="'+t.id+'">Copy</button></div>';
       });
       box.innerHTML = html;
       /* Sending a chasing message from the drawer is the same act as using the
          card's Follow up button, so it stamps the time the same way. A review
          request or a decline is not a chase, so those do not. */
-      box.querySelectorAll('a[data-chase]').forEach(function(a){
+      box.querySelectorAll('[data-chase]').forEach(function(a){
         a.addEventListener('click', function(){ markChased(e, false); });
+      });
+      box.querySelectorAll('button[data-thr]').forEach(function(b){
+        b.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var t = TPL.filter(function(x){ return x.id===b.getAttribute('data-thr'); })[0];
+          if(t) draftReply(e, t, b);
+        });
       });
       /* Sending the closing request from the drawer ends the lead too, so the board
          matches what the customer was just told. Undoable from the toast. */
-      box.querySelectorAll('a[data-close]').forEach(function(a){
+      box.querySelectorAll('[data-close]').forEach(function(a){
         a.addEventListener('click', function(){
           if(statusOf(e)==='Lost') return;
           var was = e.status || '';

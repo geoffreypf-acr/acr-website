@@ -25,6 +25,24 @@ function doPost(e) {
       return ContentService.createTextOutput('emailed');
     }
 
+    // 1a) Draft a reply INSIDE an existing Gmail thread.
+    //     A compose URL cannot do this: there is no way to set In-Reply-To from a
+    //     link, so every "Gmail" quick reply started a new conversation with the
+    //     same subject. This replies into the real thread.
+    //     It creates a DRAFT rather than sending: the CRM opens the thread straight
+    //     after, so the reply can be read before it goes. A button that silently
+    //     emails a customer is one mis-tap from an apology.
+    if (data.action === 'replyDraft') {
+      try {
+        var th = GmailApp.getThreadById(data.threadId);
+        if (!th) return ContentService.createTextOutput('notfound');
+        th.createDraftReply(data.body || '');
+        return ContentService.createTextOutput('drafted');
+      } catch (err) {
+        return ContentService.createTextOutput('error: ' + err);
+      }
+    }
+
     // 1b) Update a lead's CRM fields (status / value / follow-up / owner / notes)
     if (data.action === 'updateEnquiry') {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -36,7 +54,7 @@ function doPost(e) {
       // chase. Apps Script only writes columns that exist, so they are listed here
       // and created on first use - no hand-editing of the sheet header.
       ['status', 'value', 'followup', 'followups', 'owner', 'notes', 'deleted', 'category',
-       'updated', 'chasedAt'].forEach(function (c) {
+       'updated', 'chasedAt', 'deposit'].forEach(function (c) {
         if (header.indexOf(c) === -1) { header.push(c); sheet.getRange(1, header.length).setValue(c); }
       });
       var tsCol = header.indexOf('timestamp');
