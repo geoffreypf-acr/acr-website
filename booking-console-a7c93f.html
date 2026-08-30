@@ -511,9 +511,10 @@
   /* ---- Write back to the CRM ----------------------------------------------
      Confirming a booking used to leave no trace on the board: the record stayed
      at whatever stage it was on, so the pipeline could not tell you what was
-     actually in the diary. It now moves to Booked - or Deposit paid, if one is
-     recorded - and the appointment is written into the notes, against the exact
-     row the details came from. Only runs when a confirmation is actually sent. */
+     actually in the diary. It moves to Booked and writes the appointment into the
+     notes, against the exact row the details came from - including any deposit,
+     which is how the board knows to flag the card. Only runs when a confirmation
+     is actually sent. */
   var crmKey = '';
   function crmWriteBack(){
     if(!SHEET_ENDPOINT || !crmKey) return false;
@@ -523,7 +524,9 @@
              + (val('price') ? ' — £' + val('price') : '')
              + (val('deposit') ? ', £' + val('deposit') + ' deposit' : '')
              + (val('invoice') ? ' — ' + val('invoice') : '');
-    var fields = { status: val('deposit') ? 'Deposit paid' : 'Booked', notes: line };
+    /* Always Booked: the CRM no longer has a "Deposit paid" stage. The deposit is
+       in the note above, and the board reads it from there to flag the card. */
+    var fields = { status: 'Booked', notes: line };
     /* The agreed price is the value of the job, and the CRM reads that column for
        its pipeline and Won figures. */
     if(val('price')) fields.value = String(val('price')).replace(/[^\d.]/g, '');

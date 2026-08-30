@@ -170,6 +170,8 @@
   .chip.fnum.n3 { color: var(--alert-400); border-color: rgba(224,105,91,.5); background: var(--alert-soft); }
   .chip.chase { color: var(--warn-400, #DFAE4E); border-color: rgba(223,174,78,.35); }
   .chip.age { color: var(--text-muted); border-color: var(--border-subtle); }
+  .chip.dep { color: #4FA3A5; border-color: rgba(79,163,165,.45); background: rgba(79,163,165,.10); }
+  .card.hasdep { border-left: 3px solid #4FA3A5; }
   .chip.inv { color: #C98A5E; border-color: rgba(201,138,94,.4); }
   .chip.pref { color: var(--secure-400); border-color: rgba(87,187,223,.4); background: rgba(87,187,223,.1); }
   .crm-btn.del { flex: none; border-color: rgba(224,105,91,.35); color: var(--alert-400); }
@@ -446,13 +448,14 @@ window.__crmStart = function(){
   var STAGES = [
     { key:'New',       color:'#8FD6EE' },
     { key:'Call back',    color:'#E8A33D' },
-    { key:'Contacted', color:'#B3BCC2' },
+    { key:'Follow Up 1', color:'#B3BCC2' },
+    { key:'Follow Up 2', color:'#9FB0BC' },
     { key:'Quoted',    color:'#DFAE4E' },
     { key:'Booked',       color:'#57BBDF' },
-    { key:'Deposit paid', color:'#4FA3A5' },
     { key:'Invoice sent', color:'#C98A5E' },
     { key:'Completed',    color:'#1F8A5B' },
     { key:'On Hold',      color:'#9B8CC4' },
+    { key:'Not Serious',  color:'#7E8C99' },
     { key:'Lost',         color:'#E0695B' },
     { key:'Archive',      color:'#5C6B78' }
   ];
@@ -465,11 +468,21 @@ window.__crmStart = function(){
   STAGES.forEach(function(s){ var o=document.createElement('option'); o.value=s.key; o.textContent=s.key; $('dStatus').appendChild(o); });
 
   function esc(t){ var d=document.createElement('div'); d.textContent=t==null?'':t; return d.innerHTML; }
-  function statusOf(e){ var s=(e.status||'').toString().trim(); return STAGES.some(function(x){return x.key===s;}) ? s : 'New'; }
+  /* Stages that were renamed or removed. The sheet still holds the old words - 35
+     records say "Contacted" - and without this they would all fall back to New.
+     Nothing is rewritten in the sheet: the old value keeps working and is replaced
+     only when that record is next saved. */
+  var STATUS_ALIAS = { 'Contacted': 'Follow Up 1', 'Deposit paid': 'Booked' };
+  function statusOf(e){
+    var s = (e.status||'').toString().trim();
+    if(STATUS_ALIAS[s]) s = STATUS_ALIAS[s];
+    return STAGES.some(function(x){ return x.key===s; }) ? s : 'New';
+  }
+  /* A lead nobody will return to. Same treatment as Lost. */
+  function isClosedOut(st){ return st==='Completed' || st==='Lost' || st==='Archive' || st==='Not Serious'; }
   function valNum(e){ var v=parseFloat(String(e.value||'').replace(/[^0-9.]/g,'')); return isNaN(v)?0:v; }
   function today(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
   function fuDate(e){ if(!e.followup) return null; var d=new Date(e.followup); return isNaN(d)?null:d; }
-  function isClosedOut(st){ return st==='Completed' || st==='Lost' || st==='Archive'; }
   function isOverdue(e){ var d=fuDate(e); if(!d) return false; if(isClosedOut(statusOf(e))) return false; return d<=today(); }
   function vehicle(e){ return [e.make,e.model].filter(Boolean).join(' '); }
   /* Turn raw service/source text into something readable on a card. */
@@ -651,6 +664,16 @@ window.__crmStart = function(){
     return 'https://mail.google.com/mail/u/' + GMAIL_USER + '/#all/'
          + encodeURIComponent(String(threadId || '').trim());
   }
+  /* Opening a specific thread in the Gmail APP has no documented scheme - only the
+     composer does. The nearest thing that works is to open the app searching for
+     this customer, which lands on their conversation. Attempted on iOS with the
+     web thread as the fallback, so nothing is lost if the scheme is not there. */
+  function gmailThreadLink(e, threadId){
+    var web = gmailThread(threadId);
+    var q = (e.email||'').toString().trim() || (e.invoiceRef||'').toString().trim();
+    if(!IS_IOS || !q) return 'href="' + web + '"';
+    return 'href="' + web + '" data-app="googlegmail:///search?query=' + encodeURIComponent(q) + '"';
+  }
 
   /* How to address them. The forms collect a title, so names arrive as
      "Mr Alex Marin" - taking the first word blindly would open a message with
@@ -762,6 +785,18 @@ window.__crmStart = function(){
     });
   })();
 
+  /* Was a deposit taken? The "Deposit paid" stage is gone, so this reads the two
+     places the fact actually lives: the old status on records written before the
+     change, and the booking console's note, which records the amount. Returns the
+     amount where there is one, or '1' when we only know that there was a deposit. */
+  function depositOf(e){
+    if(/^deposit paid$/i.test((e.status||'').toString().trim())) return '1';
+    var hay = [(e.notes||''), (e.details||'')].join(' ');
+    var m = hay.match(/\u00a3\s?([\d,]+(?:\.\d{2})?)\s*deposit/i);
+    if(m) return '\u00a3' + m[1];
+    return /\bdeposit\s*(paid|taken|received)\b/i.test(hay) ? '1' : '';
+  }
+
   /* When this record was last chased. Separate from the count on purpose: three
      chases in one afternoon and three over three months need different handling,
      and the count alone cannot tell you which you are looking at. */
@@ -800,13 +835,10 @@ window.__crmStart = function(){
          + '</span>';
   }
   function followUpMenu(e){ return cardMenu(e, 'follow', 'Follow up'); }
-  /* Three chases is where a lead stops being worth chasing. At that point the
-     Close button also closes the record: it sends the closing request and moves it
-     to Lost, so the board does not fill up with leads nobody will return to. */
-  function closeMenu(e){
-    return fnum(e) >= 3 ? cardMenu(e, 'close', 'Close &amp; Lost', true)
-                        : cardMenu(e, 'close', 'Close');
-  }
+  /* Closing a request IS giving up on the lead, so it always moves the record to
+     Lost - not only after three chases. The label says so rather than leaving you
+     to find out. */
+  function closeMenu(e){ return cardMenu(e, 'close', 'Close &amp; Lost', true); }
 
   function wireFollowUp(card, e){
     card.querySelectorAll('.fu-wrap').forEach(function(wrap){
@@ -1140,7 +1172,7 @@ window.__crmStart = function(){
 
   /* Top-level views. Keeps the working pipeline free of closed-out records. */
   var GROUPS = [
-    { key:'pipeline',  label:'Pipeline',  stages:['New','Call back','Contacted','Quoted','Booked','Deposit paid','Invoice sent','On Hold','Completed','Lost'] },
+    { key:'pipeline',  label:'Pipeline',  stages:['New','Call back','Follow Up 1','Follow Up 2','Quoted','Booked','Invoice sent','On Hold','Completed','Not Serious','Lost'] },
     { key:'onhold',    label:'On Hold',   stages:['On Hold'] },
     { key:'archive',   label:'Archive',   stages:['Archive','Completed','Lost'] },
     { key:'all',       label:'All',       stages:null }
@@ -1240,13 +1272,16 @@ window.__crmStart = function(){
       items.forEach(function(e){
         if(isOverdue(e)) due++;
         var card=document.createElement('div');
-        card.className='card'+(isOverdue(e)?' overdue':'')+(selMode?' selectable':'')+(picked[e.timestamp]?' picked':'');
+        card.className='card'+(isOverdue(e)?' overdue':'')+(selMode?' selectable':'')
+                       +(picked[e.timestamp]?' picked':'')+(depositOf(e)?' hasdep':'');
         card.draggable=!selMode; card.dataset.key=e.timestamp;
         var chips=[];
         var fn=fnum(e); if(fn) chips.push('<span class="chip fnum n'+fn+'">Follow-up '+fn+'</span>');
         var ch=chasedChip(e); if(ch) chips.push('<span class="chip chase" title="'+esc(ch.title)+'">'+esc(ch.text)+'</span>');
         if(valNum(e)) chips.push('<span class="chip val">'+money(valNum(e))+'</span>');
         var d=fuDate(e); if(d) chips.push('<span class="chip fu'+(isOverdue(e)?' late':'')+'">◔ '+fmtD(d)+'</span>');
+        var dep=depositOf(e);
+        if(dep) chips.push('<span class="chip dep">Deposit paid'+(dep==='1'?'':' '+esc(dep))+'</span>');
         var iv=(e.invoiceRef||'').toString().trim();
         if(iv) chips.push('<span class="chip inv">'+esc(iv)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
@@ -1400,7 +1435,7 @@ window.__crmStart = function(){
        can jump straight into that thread rather than starting a new mail. */
     var thread = (e.threadId||'').toString().trim();
     var threadBtn = thread
-      ? '<a class="gm" href="'+gmailThread(thread)+'" target="_blank" rel="noopener">'
+      ? '<a class="gm" '+gmailThreadLink(e, thread)+' target="_blank" rel="noopener">'
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
         + '<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>'
         + '<path d="m22 7-10 6L2 7"/></svg>Gmail thread</a>'
@@ -1440,6 +1475,7 @@ window.__crmStart = function(){
       TPL.forEach(function(t){
         /* follow / close / missed are chases; review and decline are not */
         var ch = /^(follow|close|missed)$/.test(t.id) ? ' data-chase="1"' : '';
+        if(t.id === 'close') ch += ' data-close="1"';
         html += '<div class="tpl-row"><span class="tpl-name">'+t.label+'</span>';
         if(digits) html += '<a class="wa"'+ch+' target="_blank" rel="noopener" href="'+waLink(digits, chatBody(t))+'">WhatsApp</a>'
                         +  '<a'+ch+' href="sms:+'+digits+'&body='+encodeURIComponent(chatBody(t))+'">SMS</a>';
@@ -1457,6 +1493,18 @@ window.__crmStart = function(){
          request or a decline is not a chase, so those do not. */
       box.querySelectorAll('a[data-chase]').forEach(function(a){
         a.addEventListener('click', function(){ markChased(e, false); });
+      });
+      /* Sending the closing request from the drawer ends the lead too, so the board
+         matches what the customer was just told. Undoable from the toast. */
+      box.querySelectorAll('a[data-close]').forEach(function(a){
+        a.addEventListener('click', function(){
+          if(statusOf(e)==='Lost') return;
+          var was = e.status || '';
+          e.status = 'Lost'; save(e.timestamp, { status: 'Lost' }); render();
+          showToast(nameOf(e) + ' marked Lost', function(){
+            e.status = was; save(e.timestamp, { status: was }); render();
+          });
+        });
       });
       box.querySelectorAll('button[data-tpl]').forEach(function(b){
         b.addEventListener('click', function(){
