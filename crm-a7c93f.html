@@ -1603,7 +1603,13 @@ window.__crmStart = function(){
     if(!current) return;
     current.status=$('dStatus').value; current.category=$('dCategory').value; current.value=$('dValue').value; current.followup=$('dFollowup').value; current.owner=$('dOwner').value; current.notes=$('dNotes').value; current.followups=fnumVal||'';
     save(current.timestamp, { status:current.status, category:current.category, value:current.value, followup:current.followup, owner:current.owner, notes:current.notes, followups:current.followups });
-    render(); this.textContent='Saved ✓'; var self=this; setTimeout(function(){ self.textContent='Save'; }, 1300);
+    render();
+    /* Close on save. Leaving the record open after saving meant closing it by hand
+       every time, and made it easy to wonder whether the save had taken. The tick
+       shows briefly first so the save is visibly acknowledged. */
+    this.textContent='Saved \u2713';
+    var self=this;
+    setTimeout(function(){ self.textContent='Save'; closeDrawer(); }, 600);
   });
 
   // Delete (soft) + undo
