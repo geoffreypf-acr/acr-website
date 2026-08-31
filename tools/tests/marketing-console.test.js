@@ -468,10 +468,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(!/trackers and immobilisers only/i.test(body),
        'and it does NOT still claim the reward is security-only');
     ok(/no limit on how many/i.test(body), 'and that referrals are uncapped');
-    ok(/https:\/\/acrautomobile\.com\/referrals/.test(body),
-       'and links the referrals page (got: ' + (body.match(/https:\S*/g) || []).join(' ') + ')');
-    ok(/on its own line/.test('on its own line') && /\nhttps:\/\/acrautomobile\.com\/referrals\n/.test(body + '\n'),
-       'on its own line, so no email client swallows it into the sentence');
+    ok(/All you need to do is fill out this form, https:\/\/acrautomobile\.com\/referrals/.test(body),
+       'the form link is in the sentence, as supplied (got: ' + (body.match(/All you need[^\n]*/) || [''])[0] + ')');
+    ok(!/All you need to is/.test(body),
+       'and the dropped word in the supplied copy is corrected');
+    ok(/referrals \u2014 we do the rest/.test(body),
+       'a space before the dash, so a greedy autolinker cannot pull it into the URL');
+    ok(!/Or just reply to this email/.test(body), 'the superseded reply line is gone');
+    ok(!/Everything is here, including the form/.test(body), 'and the superseded intro line');
     ok(/\{\{first\}\}/.test(body), 'personalised');
 
     // photo validation
