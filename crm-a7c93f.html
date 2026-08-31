@@ -63,6 +63,10 @@
     .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 12px; align-items: start; }
     .dcard { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 15px 16px 17px; }
     .dcard h3 { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin: 0 0 13px; }
+    /* Two groups in one card: they answer different questions and must not be
+       read as one list - a website enquiry found via Google is in both. */
+    .dcard .dsub { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 9px; }
+    .dcard .dsub.sep { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
     .dcard-h { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
     .dcard-h h3 { margin: 0; flex: 1; }
     .dsel { flex: none; height: 28px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--border-default);
@@ -382,8 +386,13 @@
     <div class="dash-charts">
       <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
       <div class="dcard"><h3>By category</h3><div class="bars" id="chSource"></div></div>
-      <div class="dcard"><h3>How they reached us</h3><div class="bars" id="chService"></div></div>
-      <div class="dcard"><h3>Where they came from</h3><div class="bars" id="chFound"></div></div>
+      <div class="dcard">
+        <h3>Where they came from</h3>
+        <div class="dsub">What brought them to us</div>
+        <div class="bars" id="chFound"></div>
+        <div class="dsub sep">How the enquiry arrived</div>
+        <div class="bars" id="chService"></div>
+      </div>
       <div class="dcard">
         <div class="dcard-h">
           <h3 id="chWeeksTitle">Enquiries, last 8 weeks</h3>

@@ -15,20 +15,20 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('   FAIL: ' + m
 
 const ROWS = [
   { timestamp: '2026-08-20T10:00:00.000Z', name: 'Alex Marin',   email: 'a@x.com', status: 'New',
-    service: 'Meta Trak S5', make: 'Porsche', model: '911', foundVia: 'ChatGPT' },
+    service: 'Meta Trak S5', make: 'Porsche', model: '911', foundVia: 'ChatGPT', source: 'contact.html' },
   { timestamp: '2026-08-21T10:00:00.000Z', name: 'Sam Reid',     email: 'b@x.com', status: 'Quoted',
-    service: 'Apple CarPlay', make: 'BMW', model: 'X5',      foundVia: 'Google' },
+    service: 'Apple CarPlay', make: 'BMW', model: 'X5',      foundVia: 'Google', source: 'index.html' },
   { timestamp: '2026-08-22T10:00:00.000Z', name: 'Jo Patel',     email: 'c@x.com', status: 'New',
-    service: 'Dash camera', make: 'Audi', model: 'Q7',       foundVia: 'Google' },
+    service: 'Dash camera', make: 'Audi', model: 'Q7',       foundVia: 'Google', source: 'gmail' },
   { timestamp: '2026-08-23T10:00:00.000Z', name: 'Chris Lowe',   email: 'd@x.com', status: 'Booked',
-    service: 'Immobiliser', make: 'Range Rover', model: 'Sport', foundVia: 'Referral' },
+    service: 'Immobiliser', make: 'Range Rover', model: 'Sport', foundVia: 'Referral', source: 'phone' },
   { timestamp: '2026-08-24T10:00:00.000Z', name: 'Dana Fox',     email: 'e@x.com', status: 'New',
-    service: 'Meta Trak S7', make: 'Mercedes', model: 'G-Class', foundVia: 'Gemini' },
+    service: 'Meta Trak S7', make: 'Mercedes', model: 'G-Class', foundVia: 'Gemini', source: 'index.html' },
   { timestamp: '2026-08-25T10:00:00.000Z', name: 'Ellis Grant',  email: 'f@x.com', status: 'New',
-    service: 'Tracker', make: 'Ferrari', model: 'Roma', foundVia: 'Claude' },
+    service: 'Tracker', make: 'Ferrari', model: 'Roma', foundVia: 'Claude', source: 'tide' },
   // two rows written before the field existed - must be reported, not guessed
-  { timestamp: '2026-07-01T10:00:00.000Z', name: 'Old Lead One', email: 'g@x.com', status: 'New', service: 'Tracker' },
-  { timestamp: '2026-07-02T10:00:00.000Z', name: 'Old Lead Two', email: 'h@x.com', status: 'Lost',  service: 'Tracker' }
+  { timestamp: '2026-07-01T10:00:00.000Z', name: 'Old Lead One', email: 'g@x.com', status: 'New', service: 'Tracker', source: 'phone' },
+  { timestamp: '2026-07-02T10:00:00.000Z', name: 'Old Lead Two', email: 'h@x.com', status: 'Lost',  service: 'Tracker', source: 'gmail' }
 ];
 
 const html = fs.readFileSync(path.join(REPO, 'crm-a7c93f.html'), 'utf8');
@@ -120,6 +120,33 @@ const writes = w.__writes;
   ROWS.push({ timestamp: '2026-08-26T10:00:00.000Z', name: 'Odd Source', email: 'i@x.com', status: 'New',
               service: 'Tracker', foundVia: 'Instagram' });
   ok(true, 'harness note: an off-list value like "Instagram" is retained by foundOf() and added to the drawer list');
+
+  /* --- the two breakdowns share one card --- */
+  {
+    const found = d.getElementById('chFound'), chan = d.getElementById('chService');
+    ok(!!found && !!chan, 'both breakdowns still exist');
+    if (found && chan) {
+      const card = found.closest('.dcard');
+      ok(card && card === chan.closest('.dcard'), 'they are inside the SAME .dcard');
+      ok(card && card.querySelectorAll('h3').length === 1, 'the combined card has one heading');
+      const subs = [...card.querySelectorAll('.dsub')].map(e => e.textContent.trim());
+      ok(subs.length === 2, 'two sub-headings, got ' + subs.length);
+      ok(/brought them to us/i.test(subs[0] || ''), 'first group labelled as the source');
+      ok(/enquiry arrived/i.test(subs[1] || ''), 'second group labelled as the channel');
+      const ctxt = chan.textContent;
+      ok(!/Nothing yet/.test(ctxt),
+         'the channel breakdown still has content (' + ctxt.replace(/\s+/g,' ').trim().slice(0,70) + ')');
+      ok(/Website/.test(ctxt) && /Phone/.test(ctxt) && /Email/.test(ctxt) && /Invoiced/.test(ctxt),
+         'all four channels charted');
+      /* the two groups must not be read as one total */
+      const fSum = [...found.querySelectorAll('.row .num')].reduce((a, e) => a + (+e.textContent || 0), 0);
+      const cSum = [...chan.querySelectorAll('.row .num')].reduce((a, e) => a + (+e.textContent || 0), 0);
+      ok(fSum === 6 && cSum === 8,
+         'the groups count independently: 6 with a source, 8 with a channel (got ' + fSum + '/' + cSum + ')');
+      ok([...d.querySelectorAll('.dcard h3')].filter(h => /how they reached us/i.test(h.textContent)).length === 0,
+         'the old standalone "How they reached us" card is gone');
+    }
+  }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   dom.window.close();
