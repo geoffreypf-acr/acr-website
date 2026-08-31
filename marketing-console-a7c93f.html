@@ -71,6 +71,48 @@
   .prog { height: 7px; border-radius: 999px; background: var(--surface-inset); overflow: hidden; margin: 10px 0 12px; }
   .prog span { display: block; height: 100%; background: var(--silver-fill); width: 0; transition: width .25s ease; }
   .empty2 { color: var(--text-muted); font-size: 13px; padding: 14px 2px; }
+  /* Segment chips. A dropdown hid the counts behind a click; chips show all of
+     them at once, which is the number you actually decide on. */
+  .chips2 { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; }
+  .chip2 { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 999px;
+           border: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary);
+           font-family: var(--font-body); font-size: 13px; cursor: pointer; transition: border-color .12s, background .12s, color .12s; }
+  .chip2:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .chip2.on { background: var(--surface-1); border-color: var(--border-strong); color: var(--text-primary); }
+  .chip2 b { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .chip2.warn.on { border-color: rgba(245,181,68,.5); }
+  .seg-note { font-size: 12px; color: var(--text-muted); margin: 8px 0 14px; min-height: 17px; line-height: 1.5; }
+
+  /* Whole-row selection: clicking a 13px checkbox on a phone is a chore. */
+  table.lst tbody tr { cursor: pointer; transition: background .1s; }
+  table.lst tbody tr:hover td { background: rgba(255,255,255,.022); }
+  table.lst tbody tr.sel td { background: rgba(90,140,255,.075); }
+  table.lst tbody tr.off { cursor: default; }
+  table.lst tbody tr.off:hover td { background: none; }
+
+  /* Readiness list. Sending to real customers should feel like completing
+     something deliberate, not pressing a button and hoping. */
+  .ready { list-style: none; padding: 0; margin: 0 0 14px; }
+  .ready li { display: flex; align-items: center; gap: 9px; font-size: 13px; padding: 5px 0; color: var(--text-muted); }
+  .ready li.done { color: var(--text-secondary); }
+  .ready .bx { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border-default);
+               display: grid; place-items: center; font-size: 11px; flex: 0 0 auto; }
+  .ready li.done .bx { background: rgba(120,200,150,.16); border-color: rgba(120,200,150,.5); color: #9fd8b6; }
+
+  .doneCard { border: 1px solid rgba(120,200,150,.4); background: rgba(120,200,150,.07); border-radius: var(--radius-lg);
+              padding: 16px 18px; margin-bottom: 14px; }
+  .doneCard h3 { font-family: var(--font-display); font-size: 18px; margin: 0 0 6px; }
+  .doneCard p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+  .tile2 .v { transition: none; }
+  .kbd { font-family: var(--font-mono); font-size: 10.5px; border: 1px solid var(--border-default);
+         border-radius: 4px; padding: 1px 5px; color: var(--text-muted); }
+
+  #drop { border: 1.5px dashed var(--border-default); border-radius: var(--radius-md); padding: 20px 18px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop:hover, #drop:focus { border-color: var(--border-strong); background: var(--surface-inset); outline: none; }
+  #drop.over { border-color: var(--signal-500); background: var(--surface-inset); }
+  #drop .dz-in { font-size: 13.5px; color: var(--text-secondary); }
+  #drop .dz-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 5px; line-height: 1.5; }
   .sel-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
 
   #gate { position: fixed; inset: 0; z-index: 9999; background: var(--bg-base); display: grid; place-items: center; padding: 22px; }
@@ -116,10 +158,14 @@
   <div class="panel" id="pList">
     <h2>Contacts</h2>
     <p class="hint">Built from the CRM (one row per person, newest enquiry first) plus anything imported. Unsubscribes are permanent and can never be selected.</p>
+    <div class="chips2" id="segChips" role="radiogroup" aria-label="Segment"></div>
+    <div class="seg-note" id="segNote"></div>
     <div class="frow">
-      <input class="f" id="q" placeholder="Search name, email, vehicle or service…">
-      <select class="f" id="segSel"></select>
+      <input class="f" id="q" placeholder="Search name, email, vehicle or service…   ( / to jump here )">
     </div>
+    <!-- kept as the state holder so every other bit of logic has one source of
+         truth for the current segment, and so it stays keyboard reachable -->
+    <select id="segSel" hidden aria-hidden="true"></select>
     <div class="sel-bar">
       <button class="btn2" id="selAll">Select all shown</button>
       <button class="btn2" id="selNone">Clear</button>
@@ -218,6 +264,15 @@
   <div class="panel" id="pImport" hidden>
     <h2>Import contacts</h2>
     <p class="hint">Paste one per line. Either a bare address, or <code>email, name</code>, or a CSV with an <code>email</code> column. Addresses already in the CRM or on the list are skipped, so importing the same file twice is harmless.</p>
+    <div id="drop" tabindex="0" role="button" aria-label="Upload a contacts file">
+      <input type="file" id="impFile" accept=".csv,.txt,.tsv,text/csv,text/plain" multiple hidden>
+      <div class="dz-in">
+        <strong>Upload a file</strong> &mdash; or drag it here
+        <div class="dz-sub">CSV from Google Contacts, Outlook, Mailchimp or a spreadsheet. Also plain .txt lists.</div>
+      </div>
+    </div>
+    <div id="impFileNote" class="empty2" hidden></div>
+    <label class="fl" for="impText" style="margin-top:14px">Or paste them</label>
     <textarea class="f mono" id="impText" placeholder="alex@example.com, Alex Marin
 sam@example.com
 jo@example.com, Jo Patel"></textarea>
@@ -289,11 +344,13 @@ jo@example.com, Jo Patel"></textarea>
       <div class="prev" id="prev"></div>
     </div>
 
+    <ul class="ready" id="ready"></ul>
     <div class="sel-bar">
-      <button class="btn2" id="testBtn">Send test</button>
+      <button class="btn2" id="testBtn">Send test <span class="kbd">⌘↵</span></button>
       <button class="btn2 danger" id="sendBtn">Send to selected…</button>
       <span id="sendWho">0 recipients</span>
     </div>
+    <div id="doneWrap" hidden></div>
     <div class="prog" hidden id="progWrap"><span id="prog"></span></div>
     <div class="log" id="log" hidden></div>
   </div>
@@ -448,8 +505,28 @@ window.__mktStart = function(){
       ['Send quota left', quotaLeft==null ? '—' : quotaLeft, 'resets daily (Gmail limit)']
     ];
     $('tiles').innerHTML = t.map(function(x){
-      return '<div class="tile2"><div class="k">'+esc(x[0])+'</div><div class="v">'+esc(String(x[1]))+'</div><div class="s">'+esc(x[2])+'</div></div>';
+      var num = (typeof x[1] === 'number');
+      return '<div class="tile2"><div class="k">'+esc(x[0])+'</div>'
+           + '<div class="v"'+(num?' data-to="'+x[1]+'"':'')+'>'+esc(num?'0':String(x[1]))+'</div>'
+           + '<div class="s">'+esc(x[2])+'</div></div>';
     }).join('');
+    /* Count up once on load. Kept short - the number is the thing being read, so
+       a long animation is just a delay dressed up as polish. Skipped entirely
+       when the user has asked for reduced motion, and when there is no rAF. */
+    var still = false;
+    try { still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+    $('tiles').querySelectorAll('[data-to]').forEach(function(el){
+      var to = +el.getAttribute('data-to');
+      if(!to || to > 5000 || still || !window.requestAnimationFrame){ el.textContent = String(to); return; }
+      var start = null, dur = 260;
+      function step(ts){
+        if(start===null) start = ts;
+        var p = Math.min(1, (ts-start)/dur);
+        el.textContent = String(Math.round(to * (1 - Math.pow(1-p, 3))));
+        if(p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
     $('sub').textContent = contacts.length + ' contacts · ' + m.length + ' mailable · '
                          + unsub.length + ' unsubscribed';
   }
@@ -472,13 +549,33 @@ window.__mktStart = function(){
     if(tab==='ideas') renderIdeas();
   }
 
+  function segCount(x){
+    return contacts.filter(function(c){ return x.key==='unsub' ? c.unsubscribed : (!c.unsubscribed && x.fn(c)); }).length;
+  }
   function renderSegs(){
-    var s=$('segSel');
-    s.innerHTML = SEGS.map(function(x){
-      var n = contacts.filter(function(c){ return x.key==='unsub' ? c.unsubscribed : (!c.unsubscribed && x.fn(c)); }).length;
-      return '<option value="'+x.key+'"'+(seg===x.key?' selected':'')+'>'+esc(x.label)+' ('+n+') — '+esc(x.hint)+'</option>';
+    var sel=$('segSel');
+    sel.innerHTML = SEGS.map(function(x){
+      return '<option value="'+x.key+'"'+(seg===x.key?' selected':'')+'>'+esc(x.label)+'</option>';
     }).join('');
-    s.onchange = function(){ seg = s.value; renderList(); renderSendWho(); };
+    sel.onchange = function(){ setSeg(sel.value); };
+
+    $('segChips').innerHTML = SEGS.map(function(x){
+      var n = segCount(x);
+      return '<button type="button" role="radio" aria-checked="'+(seg===x.key)+'" class="chip2'
+           + (seg===x.key?' on':'') + (x.key==='unsub'?' warn':'') + '" data-seg="'+x.key+'">'
+           + esc(x.label) + ' <b>' + n + '</b></button>';
+    }).join('');
+    $('segChips').querySelectorAll('[data-seg]').forEach(function(b){
+      b.addEventListener('click', function(){ setSeg(b.getAttribute('data-seg')); });
+    });
+    var cur = SEGS.filter(function(x){ return x.key===seg; })[0];
+    $('segNote').textContent = cur ? cur.hint : '';
+  }
+  function setSeg(k){
+    if(seg===k) return;
+    seg = k;
+    $('segSel').value = k;
+    renderSegs(); renderList(); renderSendWho();
   }
 
   function renderList(){
@@ -509,7 +606,20 @@ window.__mktStart = function(){
       cb.addEventListener('change', function(){
         var k = cb.getAttribute('data-k');
         if(cb.checked) picked[k]=1; else delete picked[k];
+        cb.closest('tr').classList.toggle('sel', !!picked[k]);
         renderSelCount(); renderSendWho();
+      });
+    });
+    /* Whole row is the hit target - a 13px checkbox is a poor one on a phone.
+       Buttons and links inside the row keep their own behaviour. */
+    $('tbody').querySelectorAll('tr').forEach(function(tr){
+      var cb = tr.querySelector('input[type=checkbox]');
+      if(!cb) return;
+      if(picked[cb.getAttribute('data-k')]) tr.classList.add('sel');
+      tr.addEventListener('click', function(ev){
+        if(ev.target.closest('button, a, input')) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
       });
     });
     $('tbody').querySelectorAll('[data-unsub]').forEach(function(b){
@@ -525,10 +635,34 @@ window.__mktStart = function(){
     var n = pickedList().length;
     $('selCount').textContent = n + ' selected';
   }
+  var testedFor = '';        // subject+body the last test was sent for
+
   function renderSendWho(){
     var n = pickedList().length;
-    $('sendWho').textContent = n + ' recipient' + (n===1?'':'s');
+    $('sendWho').textContent = n ? '' : 'nobody selected yet';
     $('sendBtn').disabled = n===0;
+    $('sendBtn').textContent = n ? ('Send to ' + n + ' ' + (n===1?'person':'people') + '…') : 'Send to selected…';
+    renderReady();
+  }
+
+  function stamp(){ return ($('subj').value||'') + '\u0000' + ($('body').value||''); }
+
+  /* Four things have to be true before a send is a good idea. Showing them tick
+     off turns a slightly frightening button into a sequence you have finished -
+     and it makes an untested send obvious rather than accidental. */
+  function renderReady(){
+    var n = pickedList().length;
+    var items = [
+      ['Subject written', !!($('subj').value || '').trim()],
+      ['Message written', ($('body').value || '').trim().length > 40],
+      [n ? ('Recipients chosen \u2014 ' + n + ' ' + (n === 1 ? 'person' : 'people'))
+         : 'Recipients chosen', n > 0],
+      ['Test sent to yourself', !!testedFor && testedFor === stamp()]
+    ];
+    $('ready').innerHTML = items.map(function (it) {
+      return '<li class="' + (it[1] ? 'done' : '') + '">'
+           + '<span class="bx">' + (it[1] ? '\u2713' : '') + '</span>' + esc(it[0]) + '</li>';
+    }).join('');
   }
 
   function setUnsub(email, on){
@@ -549,6 +683,123 @@ window.__mktStart = function(){
 
   /* ---------------------------------------------------------------- import */
 
+  /* A real CSV reader. Google Contacts and Outlook exports have quoted fields
+     containing commas, so splitting on "," loses half the file - which would
+     look like a partial import rather than a parse failure. */
+  function csvRows(text){
+    var delim = ',';
+    var head = text.split(/\r?\n/)[0] || '';
+    if((head.split(';').length - 1) > (head.split(',').length - 1)) delim = ';';
+    else if((head.split('\t').length - 1) > (head.split(',').length - 1)) delim = '\t';
+
+    var rows = [], row = [], cur = '', q = false;
+    for(var i=0;i<text.length;i++){
+      var ch = text[i];
+      if(q){
+        if(ch === '"'){
+          if(text[i+1] === '"'){ cur += '"'; i++; } else q = false;
+        } else cur += ch;
+      } else if(ch === '"'){ q = true; }
+      else if(ch === delim){ row.push(cur); cur = ''; }
+      else if(ch === '\n'){ row.push(cur); rows.push(row); row = []; cur = ''; }
+      else if(ch === '\r'){ /* handled by \n */ }
+      else cur += ch;
+    }
+    if(cur !== '' || row.length){ row.push(cur); rows.push(row); }
+    return rows.filter(function(r){ return r.join('').trim() !== ''; });
+  }
+
+  var EMAIL_RE2 = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/;
+
+  /* Find the email and name columns by header name, covering the exports people
+     actually have: Google Contacts ("E-mail 1 - Value", "Given Name"),
+     Outlook ("E-mail Address", "First Name"), Mailchimp ("Email Address"). */
+  function mapColumns(headerRow){
+    var h = headerRow.map(function(c){ return String(c||'').trim().toLowerCase(); });
+    var email = -1, full = -1, first = -1, last = -1;
+    h.forEach(function(c, i){
+      if(email < 0 && /e-?mail/.test(c) && !/type|label/.test(c)) email = i;
+      if(full  < 0 && /^(name|full ?name|display ?name|contact ?name)$/.test(c)) full = i;
+      if(first < 0 && /^(first ?name|given ?name|forename)$/.test(c)) first = i;
+      if(last  < 0 && /^(last ?name|family ?name|surname)$/.test(c)) last = i;
+    });
+    return { email: email, full: full, first: first, last: last, looksLikeCsv: email > -1 };
+  }
+
+  function parseFile(text){
+    text = String(text||'').replace(/^﻿/, '');          // strip a BOM
+    var rows = csvRows(text);
+    if(!rows.length) return { rows: [], bad: [], note: 'the file was empty' };
+
+    var map = mapColumns(rows[0]);
+    if(!map.looksLikeCsv){
+      /* No email column in the header - treat the whole thing as a plain list,
+         which is what a .txt of addresses looks like. */
+      var p = parseImport(text);
+      p.note = rows.length + ' line' + (rows.length===1?'':'s') + ' read as a plain list';
+      return p;
+    }
+
+    var out = [], bad = [], seen = {};
+    for(var i=1;i<rows.length;i++){
+      var r = rows[i];
+      var em = String(r[map.email] || '').trim().replace(/^["'<]+|[">']+$/g, '');
+      /* Some exports put several addresses in one cell, separated by ::: or , */
+      em = em.split(/\s*(?::::|,|;)\s*/)[0].trim();
+      if(!EMAIL_RE2.test(em)){ if(r.join('').trim()) bad.push(r.slice(0,3).join(' | ')); continue; }
+      var k = em.toLowerCase();
+      if(seen[k]) continue; seen[k] = 1;
+      var name = '';
+      if(map.full > -1)  name = String(r[map.full] || '').trim();
+      if(!name && (map.first > -1 || map.last > -1)){
+        name = [map.first > -1 ? r[map.first] : '', map.last > -1 ? r[map.last] : '']
+                 .map(function(x){ return String(x||'').trim(); }).filter(Boolean).join(' ');
+      }
+      out.push({ email: em, name: name });
+    }
+    return { rows: out, bad: bad,
+             note: (rows.length-1) + ' data row' + (rows.length-1===1?'':'s') + ' read from the file'
+                   + (map.full>-1||map.first>-1 ? ', names included' : ', no name column found') };
+  }
+
+  function readFiles(files){
+    var list = Array.prototype.slice.call(files || []);
+    if(!list.length) return;
+    var texts = [], done = 0, tooBig = [];
+    list.forEach(function(f){
+      if(f.size > 4 * 1024 * 1024){ tooBig.push(f.name); done++; return; }
+      var fr = new FileReader();
+      fr.onload = function(){ texts.push({ name:f.name, text:String(fr.result||'') }); finish(); };
+      fr.onerror = function(){ texts.push({ name:f.name, text:'', err:true }); finish(); };
+      fr.readAsText(f);
+    });
+    function finish(){
+      done++;
+      if(done < list.length) return;
+      var all = [], bad = [], notes = [];
+      texts.forEach(function(t){
+        if(t.err){ notes.push(t.name + ': could not be read'); return; }
+        var p = parseFile(t.text);
+        all = all.concat(p.rows); bad = bad.concat(p.bad);
+        notes.push(t.name + ': ' + p.note);
+      });
+      tooBig.forEach(function(n){ notes.push(n + ': skipped, over 4MB'); });
+      /* Merge into the textarea rather than replacing it, so an upload can be
+         combined with a pasted list and nothing silently disappears. */
+      var lines = all.map(function(r){ return r.name ? r.email + ', ' + r.name : r.email; });
+      var existing = ($('impText').value||'').trim();
+      $('impText').value = (existing ? existing + '\n' : '') + lines.join('\n');
+      var noteEl = $('impFileNote');
+      noteEl.hidden = false;
+      noteEl.innerHTML = notes.map(esc).join('<br>')
+        + (bad.length ? '<div style="color:#e79093;margin-top:6px">' + bad.length
+            + ' row' + (bad.length===1?'':'s') + ' had no usable address: ' + esc(bad.slice(0,3).join(' / '))
+            + (bad.length>3?' …':'') + '</div>' : '');
+      previewImport();
+    }
+    if(!list.length) finish();
+  }
+
   function parseImport(txt){
     var out = [], bad = [], seen = {};
     String(txt||'').split(/[\r\n]+/).forEach(function(line){
@@ -567,6 +818,28 @@ window.__mktStart = function(){
   }
 
   $('impText').addEventListener('input', function(){ previewImport(); });
+
+  (function fileUpload(){
+    var dz = $('drop'), inp = $('impFile');
+    if(!dz || !inp) return;
+    dz.addEventListener('click', function(){ inp.click(); });
+    dz.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); inp.click(); }
+    });
+    inp.addEventListener('change', function(){ readFiles(inp.files); inp.value = ''; });
+    ['dragenter','dragover'].forEach(function(ev){
+      dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); });
+    });
+    ['dragleave','drop'].forEach(function(ev){
+      dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); });
+    });
+    dz.addEventListener('drop', function(e){ readFiles(e.dataTransfer && e.dataTransfer.files); });
+    /* Dropping anywhere else on the page must not make the browser navigate to
+       the file, which looks exactly like the console crashing. */
+    ['dragover','drop'].forEach(function(ev){
+      window.addEventListener(ev, function(e){ if(!dz.contains(e.target)) e.preventDefault(); });
+    });
+  })();
   function previewImport(){
     var p = parseImport($('impText').value);
     var known = {}; contacts.forEach(function(c){ known[c.email.toLowerCase()]=1; });
@@ -602,8 +875,8 @@ window.__mktStart = function(){
     $('subj').value = t.s; $('body').value = t.b;
     renderPreview();
   });
-  $('subj').addEventListener('input', renderPreview);
-  $('body').addEventListener('input', renderPreview);
+  $('subj').addEventListener('input', function(){ renderPreview(); renderReady(); });
+  $('body').addEventListener('input', function(){ renderPreview(); renderReady(); });
   $('q').addEventListener('input', renderList);
   $('prevWho').addEventListener('change', renderPreview);
 
@@ -901,7 +1174,10 @@ window.__mktStart = function(){
         .then(function(t){
           var d={}; try { d=JSON.parse(t); } catch(e){}
           btn.disabled=false; btn.textContent='Send test';
-          if(d.ok){ logLine('Test sent to ' + to + (d.quotaLeft!=null ? ' (quota left: '+d.quotaLeft+')' : '')); }
+          if(d.ok){
+            testedFor = stamp(); renderReady();
+            logLine('Test sent to ' + to + (d.quotaLeft!=null ? ' (quota left: '+d.quotaLeft+')' : ''));
+          }
           else { logLine('Test FAILED: ' + (d.error||'unknown')); alert('Test failed: ' + (d.error||'unknown')); }
         })
         .catch(function(e){ btn.disabled=false; btn.textContent='Send test'; logLine('Test failed: '+e.message); });
@@ -917,12 +1193,18 @@ window.__mktStart = function(){
                 + 'The campaign will send what it can and stop. It is resumable — press Send again tomorrow '
                 + 'and it picks up exactly where it left off, with nobody receiving two copies.\n\nContinue?')) return;
     }
+    if(testedFor !== stamp()){
+      if(!confirm('You have not sent yourself a test of this exact message.\n\n'
+                + 'A test takes about ten seconds and catches the things a preview does not — '
+                + 'how it renders in Gmail, and whether the unsubscribe link works.\n\n'
+                + 'Send to ' + list.length + ' people anyway?')) return;
+    }
     var typed = prompt('This sends a real email to ' + list.length + ' people.\n\n'
                      + 'Type the number ' + list.length + ' to confirm:');
     if(String(typed||'').trim() !== String(list.length)) { alert('Not sent.'); return; }
 
     var btn=this; btn.disabled=true;
-    $('log').textContent=''; $('progWrap').hidden=false;
+    $('log').textContent=''; $('progWrap').hidden=false; $('doneWrap').hidden=true;
     var emails = list.map(function(c){ return c.email; });
     var id = saveCampaign(emails);
     logLine('Campaign ' + id + ' · ' + emails.length + ' recipients');
@@ -952,6 +1234,13 @@ window.__mktStart = function(){
             setTimeout(batch, 900);
           } else {
             logLine('Finished. ' + total + ' processed.');
+            var w2=$('doneWrap');
+            w2.hidden=false;
+            w2.innerHTML = '<div class="doneCard"><h3>Sent to ' + total + ' '
+              + (total===1?'person':'people') + '</h3><p>Every address is logged against campaign '
+              + esc(id) + ', so if you send this again nobody receives it twice. '
+              + 'Replies come straight to info@acrautomobile.com.</p></div>';
+            $('progWrap').hidden = true;
             btn.disabled=false; renderTiles();
           }
         })
@@ -969,6 +1258,13 @@ window.__mktStart = function(){
   });
   $('selNone').addEventListener('click', function(){ picked={}; renderList(); renderSendWho(); });
   $('reload').addEventListener('click', function(){ load(true); });
+
+  /* Two shortcuts, both for things done many times a session. */
+  document.addEventListener('keydown', function(e){
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
+    if(e.key === '/' && !typing){ e.preventDefault(); tab='list'; renderTabs(); $('q').focus(); return; }
+    if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); $('testBtn').click(); }
+  });
 
   load();
 };

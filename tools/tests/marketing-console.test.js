@@ -106,6 +106,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(/Customers/.test(d.getElementById('segSel').value === 'cust' ? 'Customers' : ''), 'default segment is Customers');
   ok(d.getElementById('segSel').value === 'cust', 'the safe segment is selected by default, not everyone');
 
+  await wait(420);                       // the tile counters animate for 260ms
   const tiles = d.getElementById('tiles').textContent;
   ok(/Unsubscribed/.test(tiles), 'an unsubscribed tile is shown');
   ok(/5/.test(tiles), 'all five contacts counted');
@@ -181,8 +182,10 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await wait(40);
   ok(!d.getElementById('sendBtn').disabled, 'Send enables once recipients are selected');
-  const n = +d.getElementById('sendWho').textContent.match(/\d+/)[0];
+  const n = +d.getElementById('sendBtn').textContent.match(/\d+/)[0];
   ok(n === 2, 'the Customers segment selects 2 (Alex + Sam), excluding the opted-out customer (got ' + n + ')');
+  ok(/Send to 2 people/.test(d.getElementById('sendBtn').textContent),
+     'the button states who it is about to email (got: ' + d.getElementById('sendBtn').textContent.trim() + ')');
 
   // refuse a wrong confirmation
   calls.post.length = 0;
@@ -210,6 +213,73 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(sendState.sent.length === 2 && new Set(sendState.sent).size === 2,
      'each address was sent exactly once across the batches (got ' + JSON.stringify(sendState.sent) + ')');
   ok(/2\/2 done/.test(log), 'progress was reported per batch');
+
+  /* ---------- file upload: the exports people actually have ---------- */
+  console.log('contact upload');
+  {
+    const tabs0 = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs0.find(b => /import/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    ok(!!d.getElementById('drop'), 'a drop zone exists');
+    ok(!!d.getElementById('impFile'), 'a file picker exists');
+
+    const feed = async (name, text) => {
+      d.getElementById('impText').value = '';
+      d.getElementById('impFileNote').hidden = true;
+      const f = new w.File([text], name, { type: 'text/csv' });
+      const dt = { files: [f] };
+      const ev = new w.Event('drop', { bubbles: true, cancelable: true });
+      ev.dataTransfer = dt;
+      d.getElementById('drop').dispatchEvent(ev);
+      for (let i = 0; i < 40 && !d.getElementById('impText').value; i++) await wait(30);
+      return d.getElementById('impText').value;
+    };
+
+    // Google Contacts: quoted commas in a field, "E-mail 1 - Value", Given/Family Name
+    let v = await feed('google.csv',
+      'Given Name,Family Name,Organization Name,E-mail 1 - Value\n' +
+      'Alex,Marin,"Marin, Holdings Ltd",alex@example.com\n' +
+      'Sam,Reid,,sam@example.com\n');
+    ok(/alex@example\.com, Alex Marin/.test(v), 'Google Contacts export: address + Given/Family name (got: ' + v.replace(/\n/g,' | ') + ')');
+    ok(/sam@example\.com, Sam Reid/.test(v), 'second row too');
+    ok(!/Holdings/.test(v), 'a quoted comma inside a field did not shift the columns');
+
+    // Outlook
+    v = await feed('outlook.csv', 'First Name,Last Name,E-mail Address\nJo,Patel,jo@example.com\n');
+    ok(/jo@example\.com, Jo Patel/.test(v), 'Outlook export mapped');
+
+    // Mailchimp
+    v = await feed('mc.csv', 'Email Address,First Name,Last Name\nchris@example.com,Chris,Lowe\n');
+    ok(/chris@example\.com, Chris Lowe/.test(v), 'Mailchimp export mapped');
+
+    // semicolon delimiter + BOM (European spreadsheet export)
+    v = await feed('euro.csv', '\ufeffName;Email\nDana Fox;dana@example.com\n');
+    ok(/dana@example\.com, Dana Fox/.test(v), 'semicolon delimiter and a BOM both handled');
+
+    // several addresses in one cell
+    v = await feed('multi.csv', 'Name,E-mail 1 - Value\nEllis Grant,"ellis@example.com ::: old@example.com"\n');
+    ok(/ellis@example\.com/.test(v) && !/old@example\.com/.test(v), 'takes the first address when a cell holds several');
+
+    // plain txt list, no header
+    v = await feed('list.txt', 'one@example.com\ntwo@example.com, Two Person\n');
+    ok(/one@example\.com/.test(v) && /two@example\.com, Two Person/.test(v), 'a plain .txt list still works');
+
+    // rows with no usable address are reported, not silently dropped
+    v = await feed('messy.csv', 'Name,Email\nGood One,good@example.com\nNo Address,\nAlso Bad,nonsense\n');
+    ok(/good@example\.com/.test(v), 'the good row is kept');
+    ok(/2 rows had no usable address/.test(d.getElementById('impFileNote').textContent),
+       'the two unusable rows are reported (got: ' + d.getElementById('impFileNote').textContent.slice(0,90) + ')');
+
+    // upload MERGES with anything pasted rather than wiping it
+    d.getElementById('impText').value = 'pasted@example.com';
+    const f2 = new w.File(['Email\nuploaded@example.com\n'], 'u.csv', { type: 'text/csv' });
+    const ev2 = new w.Event('drop', { bubbles: true, cancelable: true }); ev2.dataTransfer = { files: [f2] };
+    d.getElementById('drop').dispatchEvent(ev2);
+    for (let i = 0; i < 40 && !/uploaded/.test(d.getElementById('impText').value); i++) await wait(30);
+    const merged = d.getElementById('impText').value;
+    ok(/pasted@example\.com/.test(merged) && /uploaded@example\.com/.test(merged),
+       'an upload merges with a pasted list instead of replacing it');
+  }
 
   /* ---------- offer builder: exact, not paraphrased ---------- */
   console.log('offer builder');
@@ -283,6 +353,83 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(/\{\{first\}\}/.test(d.getElementById('body').value), 'the seed includes the merge field');
     ok(/\[Write the useful part here/.test(d.getElementById('body').value),
        'it leaves an explicit gap for you to write, rather than pretending to be finished');
+  }
+
+  /* ---------- the UI additions ---------- */
+  console.log('ui');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /contacts/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+
+    // segment chips with visible counts
+    const chips = [...d.querySelectorAll('#segChips .chip2')];
+    ok(chips.length === 5, 'five segment chips (got ' + chips.length + ')');
+    ok(chips.every(c => /\d/.test(c.textContent)), 'every chip shows its count without a click');
+    const onChip = chips.find(c => c.classList.contains('on'));
+    ok(onChip && /Customers/.test(onChip.textContent), 'Customers is the chip selected by default');
+    ok(onChip.getAttribute('aria-checked') === 'true', 'the selected chip is marked aria-checked');
+    ok(/soft opt-in/i.test(d.getElementById('segNote').textContent), 'the note explains why that segment is the default');
+
+    chips.find(c => /Everyone/.test(c.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    ok(d.getElementById('segSel').value === 'all', 'a chip click updates the state holder too');
+    ok(d.querySelector('#segChips .chip2.on').textContent.match(/Everyone/), 'and the chip highlight moves');
+
+    // whole-row selection
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    const row = [...d.querySelectorAll('#tbody tr')].find(r => /alex@example/.test(r.textContent));
+    row.querySelector('td:nth-child(3)').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(row.querySelector('input[type=checkbox]').checked, 'clicking the row selects it');
+    ok(row.classList.contains('sel'), 'and the row is visibly marked');
+    ok(/1 selected/.test(d.getElementById('selCount').textContent), 'the count follows');
+
+    // a click on a button inside the row must not toggle selection
+    const unsubBtn = row.querySelector('[data-unsub]');
+    if (unsubBtn) {
+      w.confirm = () => false;
+      const before = row.querySelector('input[type=checkbox]').checked;
+      unsubBtn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+      await wait(40);
+      const after = d.querySelector('#tbody tr input[type=checkbox]');
+      ok(!after || after.checked === before, 'clicking Unsubscribe inside a row does not also toggle selection');
+    }
+
+    // an unsubscribed row is not clickable at all
+    d.getElementById('segSel').value = 'unsub';
+    d.getElementById('segSel').dispatchEvent(new w.Event('change'));
+    await wait(60);
+    const offRow = d.querySelector('#tbody tr');
+    offRow.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    ok(!offRow.querySelector('input[type=checkbox]'), 'an unsubscribed row has no checkbox to toggle');
+
+    // readiness checklist
+    tabs.find(b => /compose/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    const items = () => [...d.querySelectorAll('#ready li')].map(li => li.className.indexOf('done') > -1);
+    // a genuinely blank slate: no subject, no message, nobody selected
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    d.getElementById('subj').value = ''; d.getElementById('subj').dispatchEvent(new w.Event('input'));
+    d.getElementById('body').value = ''; d.getElementById('body').dispatchEvent(new w.Event('input'));
+    await wait(50);
+    ok(d.querySelectorAll('#ready li').length === 4, 'four readiness items');
+    ok(items().every(x => !x), 'nothing ticked on a blank draft with nobody selected (got ' + JSON.stringify(items()) + ')');
+    ok(d.getElementById('sendBtn').disabled, 'and Send is disabled in that state');
+
+    d.getElementById('subj').value = 'A subject';
+    d.getElementById('subj').dispatchEvent(new w.Event('input'));
+    await wait(40);
+    ok(items()[0] === true, 'writing a subject ticks the first item');
+    ok(items()[1] === false, 'a short message does not tick "Message written"');
+
+    d.getElementById('body').value = 'Hi {{first}},\n\nThis is a long enough message to count as written properly.';
+    d.getElementById('body').dispatchEvent(new w.Event('input'));
+    await wait(40);
+    ok(items()[1] === true, 'a real message ticks it');
+    ok(items()[3] === false, 'the test-sent item stays unticked until a test actually goes');
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
