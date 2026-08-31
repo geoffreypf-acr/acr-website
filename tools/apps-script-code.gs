@@ -16,19 +16,22 @@ function doPost(e) {
 
     // 1) Send a booking confirmation email to the customer (from the Booking Console)
     if (data.action === 'sendBookingEmail') {
-      var opts = {
-        to: data.to,
-        subject: data.subject,
-        body: data.body,
-        name: 'ACR Automobile',
-        replyTo: SENDER,
-        bcc: NOTIFY
-      };
-      try {
-        var aliases = GmailApp.getAliases();
-        if (aliases.indexOf(SENDER) !== -1) opts.from = SENDER;
-      } catch (ignore) {}
-      MailApp.sendEmail(opts);
+      /* MailApp.sendEmail does NOT support a `from` option - that belongs to
+         GmailApp.sendEmail. Setting it on a MailApp call is silently ignored,
+         which is why booking confirmations were reaching customers from the
+         account owner rather than info@acrautomobile.com. */
+      var useAlias = false;
+      try { useAlias = GmailApp.getAliases().indexOf(SENDER) !== -1; } catch (ignore) {}
+      if (useAlias) {
+        GmailApp.sendEmail(data.to, data.subject, data.body, {
+          name: 'ACR Automobile', from: SENDER, replyTo: SENDER, bcc: NOTIFY
+        });
+      } else {
+        MailApp.sendEmail({
+          to: data.to, subject: data.subject, body: data.body,
+          name: 'ACR Automobile', replyTo: SENDER, bcc: NOTIFY
+        });
+      }
       return ContentService.createTextOutput('emailed');
     }
 

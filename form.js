@@ -953,9 +953,24 @@
            list and this was not on it. */
         var fBad = badFound(form);
         if (fBad) { err(fBad.msg, fBad.el && fBad.el.id); return; }
+        /* any extra email fields are checked too - a referral with a mistyped
+           address for the other person is a referral we cannot act on */
+        if (cfg.emailAlso) {
+          for (var ea = 0; ea < cfg.emailAlso.length; ea++) {
+            var eaBad = badEmail(V(cfg.emailAlso[ea]));
+            if (eaBad) { err(eaBad, cfg.emailAlso[ea]); return; }
+          }
+        }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
         if (fields['Name']) fields['Name'] = personName(form) || fields['Name'];
+        /* fields assembled from several inputs, e.g. title + first + surname */
+        if (cfg.compose) {
+          Object.keys(cfg.compose).forEach(function (label) {
+            var parts = cfg.compose[label].map(V).filter(Boolean);
+            if (parts.length) fields[label] = parts.join(' ');
+          });
+        }
         if (cfg.checkboxes) {
           var picked = Array.prototype.slice.call(form.querySelectorAll('input[name="' + cfg.checkboxes[0] + '"]:checked')).map(function (c) { return c.value; });
           if (!picked.length) {
@@ -985,11 +1000,17 @@
       waLabel: 'Send referral', service: 'Customer Referral',
       heading: 'New customer referral from acrautomobile.com',
       emailId: 'rf-email', telId: 'rf-tel',
-      required: [['rf-name', 'your name'], ['rf-fname', 'the name of the person you are referring'],
-                 ['rf-ftel', 'their mobile number']],
-      fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'], ['rf-reg', 'Registration'],
-               ['rf-fname', 'Referred name'], ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
+      required: [['rf-name', 'your name'],
+                 ['rf-ftitle', 'a title for the person you are referring'],
+                 ['rf-fname', 'their first name'], ['rf-fsur', 'their surname'],
+                 ['rf-femail', 'their email address'], ['rf-ftel', 'their mobile number']],
+      fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'],
+               ['rf-fname', 'Referred name'], ['rf-femail', 'Referred email'],
+               ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
                ['rf-reward', 'Reward preference']],
+      /* their name is three fields; assembled the same way the referrer's is */
+      compose: { 'Referred name': ['rf-ftitle', 'rf-fname', 'rf-fsur'] },
+      emailAlso: ['rf-femail'],
       checkboxes: ['rfneed', 'What they need', 'what they need']
     });
 

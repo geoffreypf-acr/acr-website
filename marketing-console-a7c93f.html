@@ -196,12 +196,14 @@
       <span class="bulk-st">
         <select class="f" id="bulkStatus" style="height:34px;padding:0 10px;font-size:13px;width:auto"></select>
         <button class="btn2" id="bulkApply" disabled>Set status</button>
+        <select class="f" id="bulkCat" style="height:34px;padding:0 10px;font-size:13px;width:auto"></select>
+        <button class="btn2" id="bulkCatApply" disabled>Set came-for</button>
       </span>
     </div>
     <div class="tw">
       <table class="lst" id="tbl"><thead><tr>
         <th style="width:34px"></th><th>Name</th><th>Email</th><th>Last enquiry</th>
-        <th>Status</th><th>Found via</th><th></th>
+        <th>Status</th><th>Came for</th><th>Found via</th><th></th>
       </tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <div class="empty2" id="listEmpty" hidden>Nothing matches.</div>
@@ -456,6 +458,34 @@ window.__mktStart = function(){
   var STAGES = ['New','Call back','Follow Up 1','Follow Up 2','Quoted','Booked',
                 'Invoice sent','Completed','On Hold','Not Serious','Lost','Archive'];
 
+  /* "Came to us for" is the CRM's `category` column - the same field the CRM
+     drawer edits - so setting it here and setting it there mean the same thing.
+     When it has not been set by hand it is derived from the enquiry text, which
+     is what it always did. */
+  var CRM_CATS = ['Vehicle security','CarPlay & Android','Dash cameras',
+                  'BMW & MINI','Battery & recovery','Concierge','Trade & dealership','Calls','Other'];
+  var CAT_TO_INT = { 'Vehicle security':'sec', 'CarPlay & Android':'cp', 'Dash cameras':'dc' };
+  var INT_TO_CAT = { sec:'Vehicle security', cp:'CarPlay & Android', dc:'Dash cameras' };
+
+  /* email -> { category, key } from the raw enquiry rows. The category is not in
+     the marketing payload, so it comes from the sheet the CRM reads - which also
+     means no redeploy was needed to make this editable. */
+  var catBy = {};
+  function loadCats(){
+    return loadEnquiries().then(function(rows){
+      var newest = {};
+      rows.forEach(function(r){
+        var em = String(r.email||'').trim().toLowerCase(); if(!em) return;
+        var ts = String(r.timestamp||'');
+        if(!newest[em] || ts > newest[em].ts){
+          newest[em] = { ts: ts, cat: String(r.category||'').trim(), key: ts };
+        }
+      });
+      catBy = newest;
+      return catBy;
+    });
+  }
+
   var INTERESTS = [
     { key:'',    label:'Any' },
     { key:'sec', label:'Vehicle security', re:/tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security|package/i },
@@ -463,7 +493,14 @@ window.__mktStart = function(){
     { key:'dc',  label:'Dash camera', re:/dash ?cam|thinkware/i }
   ];
   var interest = '';
+  function catOfContact(c){
+    var e = catBy[String(c.email||'').toLowerCase()];
+    return e && e.cat ? e.cat : '';
+  }
   function interestOf(c){
+    /* a category set by hand is a decision; the derived value is only a guess */
+    var set = catOfContact(c);
+    if(set) return CAT_TO_INT[set] || '';
     var hay = String(c.service || '');
     for(var i=1;i<INTERESTS.length;i++) if(INTERESTS[i].re.test(hay)) return INTERESTS[i].key;
     return '';
@@ -564,6 +601,9 @@ window.__mktStart = function(){
         if(!d.ok) throw new Error(d.error || 'unknown error');
         paint(d, false);
         try { d.__at = Date.now(); localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch(e){}
+        /* the hand-set categories live in the enquiry sheet, not the marketing
+           payload - fetched after the list is already usable */
+        loadCats().then(function(){ renderFilters(); renderList(); }).catch(function(){});
       })
       .catch(function(err){
         /* If a stale copy is already on screen, keep it and say so rather than
@@ -752,6 +792,14 @@ window.__mktStart = function(){
         + '<td class="em">'+esc(c.email)+'</td>'
         + '<td>'+esc(c.lastEnquiry ? String(c.lastEnquiry).slice(0,10) : '—')+'</td>'
         + '<td>'+statusCell+'</td>'
+        + '<td>'+(canSet
+            ? '<select class="stsel catsel" data-cat-key="'+esc(c.lastEnquiry)+'" data-cat-em="'+esc(c.email)+'">'
+              + '<option value="">Auto \u2014 ' + esc(intLabel(c)) + '</option>'
+              + CRM_CATS.map(function(v){
+                  return '<option'+(v===catOfContact(c)?' selected':'')+'>'+esc(v)+'</option>';
+                }).join('')
+              + '</select>'
+            : '<span style="color:var(--text-muted)">&mdash;</span>')+'</td>'
         + '<td>'+esc(c.foundVia||'—')+'</td>'
         + '<td>'+(c.unsubscribed
             ? '<button class="btn2" data-resub="'+esc(c.email)+'" style="height:28px;padding:0 9px;font-size:12px">Re-subscribe</button>'
@@ -760,7 +808,7 @@ window.__mktStart = function(){
     }).join('');
     if(rows.length>400){
       $('tbody').insertAdjacentHTML('beforeend',
-        '<tr><td colspan="7" class="empty2">Showing the first 400 of '+rows.length+'. Narrow the search to see the rest — "Select all shown" still selects all '+rows.length+'.</td></tr>');
+        '<tr><td colspan="8" class="empty2">Showing the first 400 of '+rows.length+'. Narrow the search to see the rest — "Select all shown" still selects all '+rows.length+'.</td></tr>');
     }
     $('tbody').querySelectorAll('input[type=checkbox]').forEach(function(cb){
       cb.addEventListener('change', function(){
@@ -788,7 +836,13 @@ window.__mktStart = function(){
     $('tbody').querySelectorAll('[data-resub]').forEach(function(b){
       b.addEventListener('click', function(){ setUnsub(b.getAttribute('data-resub'), false); });
     });
-    $('tbody').querySelectorAll('.stsel').forEach(function(sel){
+    $('tbody').querySelectorAll('.catsel').forEach(function(sel){
+      sel.addEventListener('change', function(){
+        setCategory([{ key: sel.getAttribute('data-cat-key'), email: sel.getAttribute('data-cat-em') }], sel.value);
+      });
+      sel.addEventListener('click', function(ev){ ev.stopPropagation(); });
+    });
+    $('tbody').querySelectorAll('.stsel:not(.catsel)').forEach(function(sel){
       sel.addEventListener('change', function(){
         setStatus([{ key: sel.getAttribute('data-st-key'), email: sel.getAttribute('data-st-em') }], sel.value);
       });
@@ -796,6 +850,25 @@ window.__mktStart = function(){
       sel.addEventListener('click', function(ev){ ev.stopPropagation(); });
     });
     renderSelCount();
+  }
+
+  /* Same route as the status: the CRM's `category` column, so a classification
+     set here shows on the board and vice versa. An empty value clears it, which
+     puts the row back to being derived from the enquiry text. */
+  function setCategory(items, value){
+    if(!items.length) return;
+    items.forEach(function(it){
+      post({ action:'updateEnquiry', key: it.key, fields: { category: value } });
+      var em = String(it.email).toLowerCase();
+      if(!catBy[em]) catBy[em] = { ts: it.key, key: it.key, cat: '' };
+      catBy[em].cat = value;
+    });
+    try { localStorage.removeItem(CACHE_KEY); } catch(e){}
+    logLine(value
+      ? ('Came-for set to "' + value + '" for ' + items.length + ' ' + (items.length===1?'contact':'contacts') + '.')
+      : ('Came-for cleared for ' + items.length + ' ' + (items.length===1?'contact':'contacts')
+         + ' \u2014 back to being read from the enquiry.'));
+    renderFilters(); renderList(); renderSendWho();
   }
 
   /* Writes through the CRM's own updateEnquiry action, so a status set here is
@@ -821,10 +894,17 @@ window.__mktStart = function(){
     setTimeout(function(){ load(true); }, 3000);
   }
 
+  function intLabel(c){
+    var k = interestOf(c);
+    var f = INTERESTS.filter(function(x){ return x.key===k; })[0];
+    return (f && f.key) ? f.label : 'not classified';
+  }
+
   function renderSelCount(){
     var n = pickedList().length;
     $('selCount').textContent = n + ' selected';
     if(window.__syncBulk) window.__syncBulk();
+    if(window.__syncBulkCat) window.__syncBulkCat();
   }
   var testedFor = '';        // subject+body the last test was sent for
 
@@ -1516,7 +1596,12 @@ window.__mktStart = function(){
           btn.disabled=false; btn.textContent='Send test';
           if(d.ok){
             testedFor = stamp(); renderReady();
-            logLine('Test sent to ' + to + (d.quotaLeft!=null ? ' (quota left: '+d.quotaLeft+')' : ''));
+            logLine('Test sent to ' + to + (d.sentAs ? ' \u2014 from ' + d.sentAs : '')
+                    + (d.quotaLeft!=null ? ' (quota left: '+d.quotaLeft+')' : ''));
+            if(d.sentAs && d.sentAs !== fromAddr){
+              logLine('NOTE: that went out as ' + d.sentAs + ', not ' + fromAddr
+                      + '. Check the send-as alias in Gmail settings.');
+            }
           }
           else { logLine('Test FAILED: ' + (d.error||'unknown')); alert('Test failed: ' + (d.error||'unknown')); }
         })
@@ -1591,6 +1676,33 @@ window.__mktStart = function(){
     }
     setTimeout(batch, 2400);
   });
+
+  (function bulkCategory(){
+    var sel=$('bulkCat'), btn=$('bulkCatApply');
+    if(!sel||!btn) return;
+    sel.innerHTML = '<option value="">Set came-for to&hellip;</option>'
+      + CRM_CATS.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
+    function sync(){
+      var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
+      btn.disabled = !sel.value || !n;
+      btn.textContent = n ? ('Set came-for \u2014 ' + n) : 'Set came-for';
+    }
+    sel.addEventListener('change', sync);
+    btn.addEventListener('click', function(){
+      var items = pickedList().filter(function(c){ return c.lastEnquiry; })
+                    .map(function(c){ return { key:c.lastEnquiry, email:c.email }; });
+      var skipped = pickedList().length - items.length;
+      if(!items.length || !sel.value) return;
+      if(!confirm('Set ' + items.length + ' ' + (items.length===1?'contact':'contacts')
+                + ' to came-for "' + sel.value + '"?'
+                + (skipped ? '\n\n' + skipped + ' imported contact'+(skipped===1?'':'s')
+                    + ' will be skipped \u2014 they have no enquiry to attach it to.' : ''))) return;
+      setCategory(items, sel.value);
+      sel.value = ''; sync();
+    });
+    window.__syncBulkCat = sync;
+    sync();
+  })();
 
   (function bulkStatus(){
     var sel=$('bulkStatus'), btn=$('bulkApply');

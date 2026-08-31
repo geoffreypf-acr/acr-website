@@ -172,7 +172,9 @@ console.log('wire()-built forms (referral, trade, dealership)');
          or the form correctly refuses to send */
       check: 'input[name="rfneed"]',
       fill: { 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
-              'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
+              'rf-email':'alex@example.com',
+              'rf-ftitle':'Mrs','rf-fname':'Sam','rf-fsur':'Reid',
+              'rf-femail':'sam@example.com','rf-ftel':'07700 900111',
               'rf-fveh':'Range Rover Sport','rf-reward':'Cash by bank transfer' } },
     { page: 'referrals.html', form: 'tradeForm', btn: 'tradeSubmit', found: 'found-1',
       fill: { 'tr-biz':'Acme Cars','tr-title':'Mr','tr-name':'Alex','tr-sur':'Marin',
@@ -216,7 +218,8 @@ console.log('wire()-built forms (referral, trade, dealership)');
   ok(boxes.every(b => b.type === 'checkbox'), 'they are checkboxes, not a single-choice select');
 
   Object.entries({ 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
-                   'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
+                   'rf-email':'alex@example.com','rf-ftitle':'Mrs','rf-fname':'Sam','rf-fsur':'Reid',
+                   'rf-femail':'sam@example.com','rf-ftel':'07700 900111',
                    'found-2':'Google' }).forEach(([id, v]) => { d.getElementById(id).value = v; });
   d.getElementById('referralSubmit').dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
   ok(opened.length === 0, 'it is mandatory - a referral with no idea what they want is a blind phone call');
@@ -233,6 +236,47 @@ console.log('wire()-built forms (referral, trade, dealership)');
   ok(crm && JSON.parse(crm.body).details === 'Vehicle security, Dash camera',
      'and land in the CRM details column, where the card shows them (got '
      + (crm && JSON.stringify(JSON.parse(crm.body).details)) + ')');
+}
+
+/* ---------- 4b. the referred person's own details ---------- */
+console.log('the referred person');
+{
+  const { d, posts, opened } = boot('referrals.html', 'form.js');
+  ok(!d.getElementById('rf-reg'), 'the referrer\'s own registration field is gone');
+  ['rf-ftitle', 'rf-fname', 'rf-fsur', 'rf-femail'].forEach(id =>
+    ok(!!d.getElementById(id), 'the referred person has ' + id));
+
+  const set = (id, v) => { const e = d.getElementById(id); if (e) e.value = v; };
+  set('rf-title', 'Mr'); set('rf-name', 'Alex'); set('rf-sur', 'Marin');
+  set('rf-tel', '07700 900000'); set('rf-email', 'alex@example.com');
+  set('rf-ftitle', 'Mrs'); set('rf-fname', 'Sam'); set('rf-fsur', 'Reid');
+  set('rf-ftel', '07700 900111'); set('rf-fveh', 'Range Rover Sport');
+  set('rf-reward', 'Cash by bank transfer'); set('found-2', 'Claude');
+  d.querySelector('input[name="rfneed"]').checked = true;
+  const btn = d.getElementById('referralSubmit');
+  const click = () => btn.dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+  click();
+  ok(opened.length === 0 && /their email address/i.test((d.getElementById('referralFormErr') || {}).textContent || ''),
+     'their email is mandatory');
+
+  set('rf-femail', 'not-an-email');
+  click();
+  ok(opened.length === 0 && /valid email/i.test((d.getElementById('referralFormErr') || {}).textContent || ''),
+     'and validated - a mistyped address is a referral we cannot act on');
+
+  set('rf-femail', 'sam@example.com');
+  click();
+  const wa = decodeURIComponent(opened[0] || '');
+  ok(opened.length === 1, 'sends once complete');
+  ok(/Referred name: Mrs Sam Reid/.test(wa),
+     'their title, first name and surname come through as one name (got: '
+     + (wa.match(/Referred name: [^\n]*/) || [''])[0] + ')');
+  ok(/Referred email: sam@example\.com/.test(wa), 'their email comes through');
+  ok(!/Registration/.test(wa), 'and the removed registration field is not in the message');
+
+  /* the referrer's own name must not be overwritten by the referred person's */
+  ok(/Name: Mr Alex Marin/.test(wa), 'the referrer\'s name is still their own');
 }
 
 /* ---------- 5. the referral rewards are stated consistently ---------- */

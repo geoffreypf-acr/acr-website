@@ -100,6 +100,29 @@ function mktJson_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/* -------------------------------------------------------------- the sender */
+
+/* MailApp.sendEmail does NOT support a `from` option - that belongs to
+   GmailApp.sendEmail. Passing it to MailApp is silently ignored, which is why
+   marketing was arriving from the account owner even though info@ is a verified
+   alias. GmailApp honours it, and also leaves a copy in Sent, which for a
+   campaign is useful rather than noise.
+   Falls back to MailApp when the alias is not available, so a missing alias
+   degrades to "sent from the owner" rather than "not sent". */
+function mktSend_(to, subject, plain, html) {
+  if (mktFromOk_()) {
+    GmailApp.sendEmail(to, subject, plain, {
+      htmlBody: html, name: MKT_NAME, from: MKT_FROM, replyTo: MKT_FROM
+    });
+    return MKT_FROM;
+  }
+  MailApp.sendEmail({
+    to: to, subject: subject, body: plain, htmlBody: html,
+    name: MKT_NAME, replyTo: MKT_FROM
+  });
+  return Session.getActiveUser().getEmail() || '(account owner)';
+}
+
 /* ------------------------------------------------------------ the contacts */
 
 /* One row per PERSON, built from two places:
@@ -339,10 +362,7 @@ function mktSendBatch_(e) {
               + (pic ? '\n\n[Photo' + (picAlt ? ': ' + picAlt : '') + ']\n' + pic : '')
               + '\n\n---\nACR Automobile, Addison Avenue, Holland Park, London W11 4QR\nUnsubscribe: ' + unsub;
     try {
-      var opts = { to: em, subject: String(camp.subject), body: plain, htmlBody: html,
-                   name: MKT_NAME, replyTo: MKT_FROM };
-      try { if (GmailApp.getAliases().indexOf(MKT_FROM) !== -1) opts.from = MKT_FROM; } catch (ig) {}
-      MailApp.sendEmail(opts);
+      mktSend_(em, String(camp.subject), plain, html);
       sent++;
       logRows.push({ campaignId: id, email: em, at: new Date().toISOString(), result: 'sent' });
     } catch (err) {
@@ -393,8 +413,10 @@ function mktTest_(e) {
            + '<p style="font-size:12.5px;color:#666;margin:0">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR'
            + ' &middot; <a href="' + unsub + '" style="color:#666">Unsubscribe</a></p></div>';
   try {
-    MailApp.sendEmail({ to: to, subject: '[TEST] ' + subject, body: body, htmlBody: html, name: MKT_NAME, replyTo: MKT_FROM });
-    return mktJson_({ ok: true, to: to, quotaLeft: MailApp.getRemainingDailyQuota() });
+    /* the test has to go out the same way the real thing does, or it is not a
+       test of the real thing - this path previously set no `from` at all */
+    var sentAs = mktSend_(to, '[TEST] ' + subject, body, html);
+    return mktJson_({ ok: true, to: to, sentAs: sentAs, quotaLeft: MailApp.getRemainingDailyQuota() });
   } catch (err) {
     return mktJson_({ ok: false, error: String(err) });
   }
