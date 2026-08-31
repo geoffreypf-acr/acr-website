@@ -1222,7 +1222,17 @@ window.__crmStart = function(){
     if(fEl){
       var noAnswer = live.length - known.length;
       if(!known.length){
-        fEl.innerHTML = '<div class="empty">No answers yet \u2014 the form field is new, so this fills up as enquiries come in.</div>';
+        /* Distinguish two very different causes. If not one row even HAS the
+           column, the sheet never received it and the Apps Script is still
+           serving an old deployment - answers are being sent and thrown away.
+           Saying "no answers yet" there would hide a live data loss, which is
+           exactly how the first week of answers went missing. */
+        var hasCol = data.some(function(r){ return Object.prototype.hasOwnProperty.call(r, 'foundVia'); });
+        fEl.innerHTML = hasCol
+          ? '<div class="empty">No answers yet \u2014 the form field is new, so this fills up as enquiries come in.</div>'
+          : '<div class="empty" style="color:#e79093">The sheet has no <b>foundVia</b> column, so answers are being '
+            + 'discarded. The Apps Script needs redeploying: Deploy \u2192 Manage deployments \u2192 pencil \u2192 '
+            + 'New version.</div>';
       } else if(noAnswer){
         fEl.insertAdjacentHTML('beforeend',
           '<div class="empty" style="margin-top:8px">' + noAnswer + ' earlier record'

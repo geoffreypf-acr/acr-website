@@ -7,6 +7,9 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
+    // marketing console (marketing.gs): list, import, campaign save, unsubscribe
+    if (data.action && data.action.indexOf('mkt') === 0) { var mr = mktPost_(data); if (mr) return mr; }
+
     // 1) Send a booking confirmation email to the customer (from the Booking Console)
     if (data.action === 'sendBookingEmail') {
       var opts = {
@@ -96,6 +99,10 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  // marketing console + unsubscribe links (marketing.gs). Returns null for
+  // anything it does not own, so the CRM's own actions fall through untouched.
+  if (e && e.parameter && e.parameter.action) { var mg = mktGet_(e); if (mg) return mg; }
+
   // Force pull - the CRM calls this with ?action=sync to import new email
   // enquiries and missed calls on demand. run_() and missedCalls_() live in
   // gmailToCrm.gs in this same project.

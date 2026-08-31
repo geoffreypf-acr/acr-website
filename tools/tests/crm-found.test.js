@@ -155,6 +155,27 @@ const writes = w.__writes;
     }
   }
 
+  /* --- the two empty states must be distinguishable --- */
+  {
+    // (a) column exists, nobody has answered yet
+    w.__rows = ROWS.map(r => { const c = { ...r }; c.foundVia = ''; return c; });
+    d.getElementById('refresh').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    for (let i = 0; i < 40 && !/No answers yet/.test(d.getElementById('chFound').textContent); i++) await new Promise(r => setTimeout(r, 50));
+    let t = d.getElementById('chFound').textContent;
+    ok(/No answers yet/.test(t), 'column present + no answers -> "No answers yet" (got: ' + t.trim().slice(0, 70) + ')');
+
+    // (b) the column does not exist at all - a live data loss, not a quiet start
+    w.__rows = ROWS.map(r => { const c = { ...r }; delete c.foundVia; return c; });
+    d.getElementById('refresh').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    /* wait for the CONTENT TO CHANGE, not merely to be non-empty - the previous
+       case left "No answers yet" on screen and the loop exited on stale DOM */
+    for (let i = 0; i < 60 && !/no foundVia column/i.test(d.getElementById('chFound').textContent); i++) await new Promise(r => setTimeout(r, 50));
+    t = d.getElementById('chFound').textContent;
+    ok(/no foundVia column/i.test(t) && /redeploy/i.test(t),
+       'column missing -> says answers are being discarded and the script needs redeploying (got: ' + t.trim().slice(0, 90) + ')');
+    ok(!/No answers yet/.test(t), 'it does NOT claim "no answers yet" when the column is missing');
+  }
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   dom.window.close();
   process.exit(fail ? 1 : 0);

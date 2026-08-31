@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Marketing Console — ACR Automobile (Private)</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="site.css">
+<style>
+  .mk-shell, .mk-shell * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .mk-shell { max-width: 1240px; margin: 0 auto; padding: 24px 20px 90px; min-width: 0; }
+
+  .mk-head { display: flex; align-items: center; gap: 14px; padding: 18px 0 20px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 22px; flex-wrap: wrap; }
+  .mk-head > div { flex: 1 1 240px; min-width: 200px; }
+  .mk-head h1 { font-family: var(--font-display); font-weight: 400; font-size: 26px; margin: 0; }
+  .mk-head p { color: var(--text-muted); font-size: 13px; margin: 4px 0 0; }
+  .mk-head .acts { flex: 0 0 auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn2 { height: 38px; padding: 0 15px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-inset); color: var(--text-primary); font-family: var(--font-body); font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .btn2:hover { border-color: var(--border-strong); }
+  .btn2.primary { background: var(--silver-fill); color: var(--silver-ink); border-color: transparent; }
+  .btn2.danger { border-color: rgba(211,90,94,.5); color: #e79093; }
+  .btn2:disabled { opacity: .45; cursor: not-allowed; }
+
+  .tabs2 { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+  .tabs2 button { height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary); font-family: var(--font-body); font-size: 13px; cursor: pointer; }
+  .tabs2 button.on { background: var(--surface-1); color: var(--text-primary); border-color: var(--border-strong); }
+  .tabs2 button .n { margin-left: 7px; font-size: 11.5px; color: var(--text-muted); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .tile2 { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 13px 14px; }
+  .tile2 .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+  .tile2 .v { font-family: var(--font-display); font-size: 24px; margin: 5px 0 2px; }
+  .tile2 .s { font-size: 11.5px; color: var(--text-muted); }
+
+  .panel { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 17px 18px; margin-bottom: 16px; }
+  .panel h2 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .panel .hint { color: var(--text-muted); font-size: 12.5px; margin: 0 0 14px; line-height: 1.55; }
+
+  .note { border: 1px solid rgba(245,181,68,.35); background: rgba(245,181,68,.08); border-radius: var(--radius-md); padding: 12px 14px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 16px; }
+  .note b { color: var(--text-primary); }
+
+  label.fl { display: block; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
+  input.f, select.f, textarea.f { width: 100%; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-body); font-size: 14.5px; padding: 10px 12px; outline: none; }
+  input.f:focus, select.f:focus, textarea.f:focus { border-color: var(--signal-500); }
+  textarea.f { resize: vertical; min-height: 190px; line-height: 1.6; }
+  textarea.mono { font-family: var(--font-mono); font-size: 13px; min-height: 130px; }
+  .frow { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 13px; }
+  .frow > * { flex: 1 1 220px; min-width: 180px; }
+
+  table.lst { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.lst th { text-align: left; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 8px 9px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+  table.lst td { padding: 9px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  table.lst tr.off td { opacity: .42; }
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .em { font-family: var(--font-mono); font-size: 12.5px; }
+  .tag { display: inline-block; font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border-default); color: var(--text-secondary); margin-right: 4px; }
+  .tag.cust { border-color: rgba(120,200,150,.45); color: #9fd8b6; }
+  .tag.unsub { border-color: rgba(211,90,94,.5); color: #e79093; }
+  .tag.imp { border-color: rgba(120,160,255,.42); color: #bcd0ff; }
+
+  .prev { background: #fff; color: #111; border-radius: var(--radius-md); padding: 18px 20px; font: 15px/1.65 -apple-system, "Segoe UI", Roboto, sans-serif; max-height: 420px; overflow: auto; }
+  .prev p { margin: 0 0 14px; }
+  .prev hr { border: none; border-top: 1px solid #e3e3e3; margin: 22px 0 12px; }
+  .prev .ft { font-size: 12.5px; color: #666; }
+  .prev .banner { background: #fff4d6; padding: 9px 11px; border-radius: 6px; font-size: 13px; margin: 0 0 16px; }
+
+  .log { font-family: var(--font-mono); font-size: 12px; line-height: 1.75; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 12px 13px; max-height: 240px; overflow: auto; white-space: pre-wrap; }
+  .prog { height: 7px; border-radius: 999px; background: var(--surface-inset); overflow: hidden; margin: 10px 0 12px; }
+  .prog span { display: block; height: 100%; background: var(--silver-fill); width: 0; transition: width .25s ease; }
+  .empty2 { color: var(--text-muted); font-size: 13px; padding: 14px 2px; }
+  .sel-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
+
+  #gate { position: fixed; inset: 0; z-index: 9999; background: var(--bg-base); display: grid; place-items: center; padding: 22px; }
+  #gate .box { width: 100%; max-width: 340px; text-align: center; }
+  #gate img { height: 28px; margin: 0 0 24px; }
+  #gate h2 { font-family: var(--font-display); font-weight: 400; font-size: 24px; margin: 0 0 6px; }
+  #gate p { color: var(--text-muted); font-size: 13px; margin: 0 0 20px; }
+  #gate input { height: 50px; width: 100%; text-align: center; letter-spacing: .3em; font-size: 17px; background: var(--surface-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-family: var(--font-mono); }
+  #gate button { margin-top: 14px; height: 48px; width: 100%; border: none; border-radius: var(--radius-md); background: var(--silver-fill); color: var(--silver-ink); font-family: var(--font-body); font-weight: 600; font-size: 15px; cursor: pointer; }
+  #gate .err { color: var(--alert-400); font-size: 13px; min-height: 18px; margin-top: 12px; }
+  body.locked { overflow: hidden; }
+</style>
+</head>
+<body class="locked">
+<div id="gate">
+  <div class="box">
+    <img src="assets/logo-silver.png" alt="ACR Automobile" onerror="this.style.display='none'">
+    <h2>ACR Marketing</h2>
+    <p>Enter your passcode to continue.</p>
+    <input id="gateCode" type="password" inputmode="numeric" autocomplete="off" placeholder="• • • •" autofocus>
+    <button id="gateBtn">Unlock</button>
+    <div class="err" id="gateErr"></div>
+  </div>
+</div>
+
+<div class="mk-shell" id="shell" hidden>
+  <div class="mk-head">
+    <div>
+      <h1>Marketing console</h1>
+      <p id="sub">Loading contacts…</p>
+    </div>
+    <div class="acts">
+      <a class="btn2" href="crm-a7c93f.html">← CRM</a>
+      <button class="btn2" id="reload">Refresh</button>
+    </div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="tabs2" id="tabs"></div>
+
+  <!-- CONTACTS -->
+  <div class="panel" id="pList">
+    <h2>Contacts</h2>
+    <p class="hint">Built from the CRM (one row per person, newest enquiry first) plus anything imported. Unsubscribes are permanent and can never be selected.</p>
+    <div class="frow">
+      <input class="f" id="q" placeholder="Search name, email, vehicle or service…">
+      <select class="f" id="segSel"></select>
+    </div>
+    <div class="sel-bar">
+      <button class="btn2" id="selAll">Select all shown</button>
+      <button class="btn2" id="selNone">Clear</button>
+      <span id="selCount">0 selected</span>
+    </div>
+    <div class="tw">
+      <table class="lst" id="tbl"><thead><tr>
+        <th style="width:34px"></th><th>Name</th><th>Email</th><th>Last enquiry</th>
+        <th>Status</th><th>Found via</th><th></th>
+      </tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+    <div class="empty2" id="listEmpty" hidden>Nothing matches.</div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="panel" id="pImport" hidden>
+    <h2>Import contacts</h2>
+    <p class="hint">Paste one per line. Either a bare address, or <code>email, name</code>, or a CSV with an <code>email</code> column. Addresses already in the CRM or on the list are skipped, so importing the same file twice is harmless.</p>
+    <textarea class="f mono" id="impText" placeholder="alex@example.com, Alex Marin
+sam@example.com
+jo@example.com, Jo Patel"></textarea>
+    <div class="frow" style="margin-top:12px">
+      <div>
+        <label class="fl" for="impConsent">How was consent obtained?</label>
+        <select class="f" id="impConsent">
+          <option value="">Not recorded</option>
+          <option>Existing customer</option>
+          <option>Signed up on the website</option>
+          <option>Asked in person</option>
+          <option>Business card / event</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl" for="impTags">Tag (optional)</label>
+        <input class="f" id="impTags" placeholder="e.g. dealer-list">
+      </div>
+    </div>
+    <div id="impPrev" class="empty2"></div>
+    <button class="btn2 primary" id="impBtn">Check &amp; import</button>
+  </div>
+
+  <!-- COMPOSE -->
+  <div class="panel" id="pSend" hidden>
+    <div class="note">
+      <b>Before you send.</b> UK rules (PECR / UK GDPR) allow marketing email to existing
+      customers about similar services — the “soft opt-in” — and otherwise require consent.
+      Enquirers who never became customers are the grey area, so the
+      <b>Customers</b> segment is the safe default. Every message carries an unsubscribe
+      link and your postal address automatically. Opt-outs are honoured immediately, even
+      mid-campaign.
+    </div>
+    <h2>Compose</h2>
+    <p class="hint">Merge fields: <code>{{first}}</code> (first name, title stripped) and <code>{{name}}</code>. Blank lines become paragraphs. Plain text is fine — it is styled on the way out.</p>
+
+    <div class="frow">
+      <div>
+        <label class="fl" for="tpl">Start from</label>
+        <select class="f" id="tpl">
+          <option value="">Blank</option>
+          <option value="news">Newsletter</option>
+          <option value="update">Service update</option>
+          <option value="offer">Offer / new service</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl" for="subj">Subject</label>
+        <input class="f" id="subj" placeholder="A quick update from ACR Automobile">
+      </div>
+    </div>
+
+    <label class="fl" for="body">Message</label>
+    <textarea class="f" id="body" placeholder="Hi {{first}},"></textarea>
+
+    <div class="frow" style="margin-top:14px">
+      <div>
+        <label class="fl" for="prevWho">Preview as</label>
+        <select class="f" id="prevWho"></select>
+      </div>
+      <div>
+        <label class="fl" for="testTo">Send a test to</label>
+        <input class="f" id="testTo" value="geoffreypf@acrautomobile.com">
+      </div>
+    </div>
+
+    <div style="margin:14px 0">
+      <label class="fl">Preview</label>
+      <div class="prev" id="prev"></div>
+    </div>
+
+    <div class="sel-bar">
+      <button class="btn2" id="testBtn">Send test</button>
+      <button class="btn2 danger" id="sendBtn">Send to selected…</button>
+      <span id="sendWho">0 recipients</span>
+    </div>
+    <div class="prog" hidden id="progWrap"><span id="prog"></span></div>
+    <div class="log" id="log" hidden></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var PASS_HASH = 'a1fb4e703a9ef1fa4936801721ff285a97ac85330856674412e054892afe6972'; /* same passcode as the CRM */
+  var KEY = 'acr_mkt_auth';
+  var gate = document.getElementById('gate');
+  function unlock(){ gate.style.display='none'; document.body.classList.remove('locked');
+                     document.getElementById('shell').hidden=false; if(window.__mktStart) window.__mktStart(); }
+  async function sha(s){ var b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [].map.call(new Uint8Array(b), function(x){return x.toString(16).padStart(2,'0');}).join(''); }
+  if (sessionStorage.getItem(KEY) === PASS_HASH) { unlock(); }
+  async function tryCode(){ var v=document.getElementById('gateCode').value.trim(); var h=await sha(v);
+    if(h===PASS_HASH){ sessionStorage.setItem(KEY,h); unlock(); }
+    else { document.getElementById('gateErr').textContent='Incorrect passcode.'; document.getElementById('gateCode').value=''; } }
+  document.getElementById('gateBtn').addEventListener('click', tryCode);
+  document.getElementById('gateCode').addEventListener('keydown', function(e){ if(e.key==='Enter') tryCode(); });
+})();
+
+window.__mktStart = function(){
+  var ENDPOINT = 'https://script.google.com/macros/s/AKfycbyH3AZWwJwRs-guZUHtQdZG_-9wfajGhrkiFv2JMN_BrnB6KCJaJR4NQJdN69cSZOQRog/exec';
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  var contacts = [], picked = {}, quotaLeft = null;
+
+  /* Segments. `fn` decides membership; nothing here can override an unsubscribe -
+     that is filtered before these ever run. */
+  var SEGS = [
+    { key:'cust',  label:'Customers',        hint:'Booked, invoiced or completed — the soft opt-in group',
+      fn:function(c){ return c.customer; } },
+    { key:'all',   label:'Everyone mailable', hint:'Every address that has not opted out',
+      fn:function(){ return true; } },
+    { key:'open',  label:'Open enquiries',   hint:'Enquired but not yet a customer',
+      fn:function(c){ return !c.customer && c.enquiries>0; } },
+    { key:'imp',   label:'Imported',         hint:'Added by hand rather than from an enquiry',
+      fn:function(c){ return c.imported && !c.enquiries; } },
+    { key:'unsub', label:'Unsubscribed',     hint:'Kept on record so they are never contacted again',
+      fn:function(c){ return c.unsubscribed; } }
+  ];
+  var seg = 'cust';
+
+  var TABS = [ {k:'list',label:'Contacts'}, {k:'import',label:'Import'}, {k:'send',label:'Compose & send'} ];
+  var tab = 'list';
+
+  var TEMPLATES = {
+    news: { s:'What we have been fitting this month',
+            b:'Hi {{first}},\n\nA short update from ACR Automobile.\n\n'
+             +'Write the month’s news here — what you have been fitting, anything new in the range, '
+             +'and one genuinely useful thing an owner can act on.\n\n'
+             +'If you would like a quote for anything, just reply to this email.\n\nKind regards,\nACR Automobile' },
+    update:{ s:'A service update from ACR Automobile',
+            b:'Hi {{first}},\n\nA quick note about your vehicle security.\n\n'
+             +'Explain the change here — what it is, whether it affects them, and what they need to do '
+             +'(ideally nothing).\n\nAny questions, reply to this email and it comes straight to us.\n\n'
+             +'Kind regards,\nACR Automobile' },
+    offer: { s:'Now available at ACR Automobile',
+            b:'Hi {{first}},\n\nWe have added something you may want to know about.\n\n'
+             +'Describe it plainly — what it is, which cars it suits, and the price. '
+             +'Prices are “from” figures confirmed against your registration before you book.\n\n'
+             +'Reply to this email and we will check it against your car.\n\n'
+             +'Kind regards,\nACR Automobile' }
+  };
+
+  /* ------------------------------------------------------------------ data */
+
+  function load(){
+    $('sub').textContent = 'Loading contacts…';
+    fetch(ENDPOINT + '?action=mktList', { cache:'no-store' })
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        var d;
+        try { d = JSON.parse(t); } catch(e){ throw new Error('The script returned a page instead of data — has the new version been deployed?'); }
+        if(!d.ok) throw new Error(d.error || 'unknown error');
+        contacts = d.contacts || [];
+        quotaLeft = (d.quotaLeft==null) ? null : d.quotaLeft;
+        renderAll();
+      })
+      .catch(function(err){
+        $('sub').textContent = 'Could not load: ' + err.message;
+      });
+  }
+
+  function mailable(){ return contacts.filter(function(c){ return !c.unsubscribed; }); }
+  function inSeg(c){
+    var s = SEGS.filter(function(x){ return x.key===seg; })[0];
+    if(!s) return true;
+    if(seg!=='unsub' && c.unsubscribed) return false;
+    return s.fn(c);
+  }
+  function shown(){
+    var q = ($('q').value||'').trim().toLowerCase();
+    return contacts.filter(inSeg).filter(function(c){
+      if(!q) return true;
+      return [c.name,c.email,c.service,c.status,c.foundVia].join(' ').toLowerCase().indexOf(q)>-1;
+    });
+  }
+  function pickedList(){
+    return contacts.filter(function(c){ return picked[c.email.toLowerCase()] && !c.unsubscribed; });
+  }
+
+  /* ---------------------------------------------------------------- render */
+
+  function renderAll(){ renderTiles(); renderTabs(); renderSegs(); renderList(); renderPrevWho(); renderPreview(); renderSendWho(); }
+
+  function renderTiles(){
+    var m = mailable(), cust = m.filter(function(c){ return c.customer; });
+    var unsub = contacts.filter(function(c){ return c.unsubscribed; });
+    var imp = contacts.filter(function(c){ return c.imported && !c.enquiries; });
+    var t = [
+      ['Contacts', contacts.length, m.length + ' can be emailed'],
+      ['Customers', cust.length, 'booked, invoiced or completed'],
+      ['Enquiries only', m.length - cust.length, 'never became customers'],
+      ['Imported', imp.length, 'added by hand'],
+      ['Unsubscribed', unsub.length, unsub.length ? 'never contacted again' : 'none yet'],
+      ['Send quota left', quotaLeft==null ? '—' : quotaLeft, 'resets daily (Gmail limit)']
+    ];
+    $('tiles').innerHTML = t.map(function(x){
+      return '<div class="tile2"><div class="k">'+esc(x[0])+'</div><div class="v">'+esc(String(x[1]))+'</div><div class="s">'+esc(x[2])+'</div></div>';
+    }).join('');
+    $('sub').textContent = contacts.length + ' contacts · ' + m.length + ' mailable · '
+                         + unsub.length + ' unsubscribed';
+  }
+
+  function renderTabs(){
+    $('tabs').innerHTML = TABS.map(function(t){
+      return '<button type="button" data-t="'+t.k+'"'+(tab===t.k?' class="on"':'')+'>'+esc(t.label)+'</button>';
+    }).join('');
+    $('tabs').querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click', function(){ tab=b.getAttribute('data-t'); syncTabs(); renderTabs(); });
+    });
+    syncTabs();
+  }
+  function syncTabs(){
+    $('pList').hidden   = tab!=='list';
+    $('pImport').hidden = tab!=='import';
+    $('pSend').hidden   = tab!=='send';
+  }
+
+  function renderSegs(){
+    var s=$('segSel');
+    s.innerHTML = SEGS.map(function(x){
+      var n = contacts.filter(function(c){ return x.key==='unsub' ? c.unsubscribed : (!c.unsubscribed && x.fn(c)); }).length;
+      return '<option value="'+x.key+'"'+(seg===x.key?' selected':'')+'>'+esc(x.label)+' ('+n+') — '+esc(x.hint)+'</option>';
+    }).join('');
+    s.onchange = function(){ seg = s.value; renderList(); renderSendWho(); };
+  }
+
+  function renderList(){
+    var rows = shown();
+    $('listEmpty').hidden = rows.length>0;
+    $('tbody').innerHTML = rows.slice(0,400).map(function(c){
+      var k = c.email.toLowerCase();
+      var tags = (c.customer?'<span class="tag cust">customer</span>':'')
+               + (c.imported && !c.enquiries?'<span class="tag imp">imported</span>':'')
+               + (c.unsubscribed?'<span class="tag unsub">unsubscribed</span>':'');
+      return '<tr class="'+(c.unsubscribed?'off':'')+'">'
+        + '<td>'+(c.unsubscribed?'':'<input type="checkbox" data-k="'+esc(k)+'"'+(picked[k]?' checked':'')+'>')+'</td>'
+        + '<td>'+esc(c.name||'—')+'<div style="margin-top:3px">'+tags+'</div></td>'
+        + '<td class="em">'+esc(c.email)+'</td>'
+        + '<td>'+esc(c.lastEnquiry ? String(c.lastEnquiry).slice(0,10) : '—')+'</td>'
+        + '<td>'+esc(c.status||'—')+'</td>'
+        + '<td>'+esc(c.foundVia||'—')+'</td>'
+        + '<td>'+(c.unsubscribed
+            ? '<button class="btn2" data-resub="'+esc(c.email)+'" style="height:28px;padding:0 9px;font-size:12px">Re-subscribe</button>'
+            : '<button class="btn2 danger" data-unsub="'+esc(c.email)+'" style="height:28px;padding:0 9px;font-size:12px">Unsubscribe</button>')+'</td>'
+        + '</tr>';
+    }).join('');
+    if(rows.length>400){
+      $('tbody').insertAdjacentHTML('beforeend',
+        '<tr><td colspan="7" class="empty2">Showing the first 400 of '+rows.length+'. Narrow the search to see the rest — "Select all shown" still selects all '+rows.length+'.</td></tr>');
+    }
+    $('tbody').querySelectorAll('input[type=checkbox]').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var k = cb.getAttribute('data-k');
+        if(cb.checked) picked[k]=1; else delete picked[k];
+        renderSelCount(); renderSendWho();
+      });
+    });
+    $('tbody').querySelectorAll('[data-unsub]').forEach(function(b){
+      b.addEventListener('click', function(){ setUnsub(b.getAttribute('data-unsub'), true); });
+    });
+    $('tbody').querySelectorAll('[data-resub]').forEach(function(b){
+      b.addEventListener('click', function(){ setUnsub(b.getAttribute('data-resub'), false); });
+    });
+    renderSelCount();
+  }
+
+  function renderSelCount(){
+    var n = pickedList().length;
+    $('selCount').textContent = n + ' selected';
+  }
+  function renderSendWho(){
+    var n = pickedList().length;
+    $('sendWho').textContent = n + ' recipient' + (n===1?'':'s');
+    $('sendBtn').disabled = n===0;
+  }
+
+  function setUnsub(email, on){
+    if(on && !confirm('Unsubscribe ' + email + '?\n\nThis is permanent — they will be excluded from every future campaign.')) return;
+    contacts.forEach(function(c){ if(c.email.toLowerCase()===email.toLowerCase()){ c.unsubscribed=on; c.mailable=!on; } });
+    delete picked[email.toLowerCase()];
+    post({ action:'mktUnsub', email:email, on:on });
+    renderAll();
+  }
+
+  function post(body){
+    /* no-cors: Apps Script POST responses are not reliably readable. Anything
+       that needs an answer goes through a GET instead. */
+    return fetch(ENDPOINT, { method:'POST', mode:'no-cors', keepalive:true,
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).catch(function(){});
+  }
+
+  /* ---------------------------------------------------------------- import */
+
+  function parseImport(txt){
+    var out = [], bad = [], seen = {};
+    String(txt||'').split(/[\r\n]+/).forEach(function(line){
+      line = line.trim(); if(!line) return;
+      if(/^email\b/i.test(line) && /,/.test(line)) return;     // CSV header
+      var parts = line.split(/[,;\t]/).map(function(s){ return s.trim(); });
+      var em = parts.filter(function(p){ return /@/.test(p); })[0] || '';
+      em = em.replace(/^["'<]+|[">']+$/g, '');
+      var name = parts.filter(function(p){ return p && !/@/.test(p); }).join(' ').trim();
+      if(!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(em)){ bad.push(line); return; }
+      var k = em.toLowerCase();
+      if(seen[k]) return; seen[k]=1;
+      out.push({ email:em, name:name });
+    });
+    return { rows:out, bad:bad };
+  }
+
+  $('impText').addEventListener('input', function(){ previewImport(); });
+  function previewImport(){
+    var p = parseImport($('impText').value);
+    var known = {}; contacts.forEach(function(c){ known[c.email.toLowerCase()]=1; });
+    var fresh = p.rows.filter(function(r){ return !known[r.email.toLowerCase()]; });
+    var dupes = p.rows.length - fresh.length;
+    $('impPrev').innerHTML = !p.rows.length && !p.bad.length ? '' :
+      esc(p.rows.length + ' address' + (p.rows.length===1?'':'es') + ' read · '
+        + fresh.length + ' new · ' + dupes + ' already known'
+        + (p.bad.length ? ' · ' + p.bad.length + ' unreadable' : ''))
+      + (p.bad.length ? '<div style="margin-top:6px;color:#e79093">Could not read: ' + esc(p.bad.slice(0,4).join(' | ')) + (p.bad.length>4?' …':'') + '</div>' : '');
+    return fresh;
+  }
+
+  $('impBtn').addEventListener('click', function(){
+    var fresh = previewImport();
+    if(!fresh || !fresh.length){ alert('Nothing new to import.'); return; }
+    if(!confirm('Import ' + fresh.length + ' new contact' + (fresh.length===1?'':'s') + '?')) return;
+    var consent = $('impConsent').value, tags = $('impTags').value.trim();
+    post({ action:'mktImport', rows: fresh.map(function(r){
+      return { email:r.email, name:r.name, consent:consent, tags:tags, source:'import' };
+    })});
+    $('impText').value=''; $('impPrev').textContent='Imported — refreshing…';
+    setTimeout(load, 1800);
+  });
+
+  /* --------------------------------------------------------------- compose */
+
+  $('tpl').addEventListener('change', function(){
+    var t = TEMPLATES[$('tpl').value];
+    if(!t) return;
+    if($('body').value.trim() && !confirm('Replace what you have written?')) { $('tpl').value=''; return; }
+    $('subj').value = t.s; $('body').value = t.b;
+    renderPreview();
+  });
+  $('subj').addEventListener('input', renderPreview);
+  $('body').addEventListener('input', renderPreview);
+  $('q').addEventListener('input', renderList);
+  $('prevWho').addEventListener('change', renderPreview);
+
+  function renderPrevWho(){
+    var m = mailable().slice(0,200);
+    $('prevWho').innerHTML = '<option value="">Sample (Alex Marin)</option>'
+      + m.map(function(c){ return '<option value="'+esc(c.email)+'">'+esc((c.name||c.email))+'</option>'; }).join('');
+  }
+
+  function merge(txt, c){
+    var first = c ? (c.first || (c.name||'').split(' ')[0] || 'there') : 'Alex';
+    var name = c ? (c.name || first) : 'Alex Marin';
+    return String(txt||'').replace(/\{\{\s*first\s*\}\}/gi, first).replace(/\{\{\s*name\s*\}\}/gi, name);
+  }
+
+  function renderPreview(){
+    var who = $('prevWho').value;
+    var c = who ? contacts.filter(function(x){ return x.email===who; })[0] : null;
+    var body = merge($('body').value, c);
+    var paras = body.split(/\n{2,}/).filter(function(p){ return p.trim(); })
+      .map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('');
+    $('prev').innerHTML =
+      '<div class="banner"><b>'+esc($('subj').value || '(no subject)')+'</b><br>'
+      + 'To: ' + esc(c ? (c.name ? c.name+' <'+c.email+'>' : c.email) : 'a sample recipient') + '</div>'
+      + (paras || '<p style="color:#999">Nothing written yet.</p>')
+      + '<hr><div class="ft">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR '
+      + '&middot; <span style="text-decoration:underline">Unsubscribe</span></div>';
+  }
+
+  /* ------------------------------------------------------------ test &amp; send */
+
+  function newId(){ return 'C' + Date.now() + Math.floor(Math.random()*900+100); }
+
+  function saveCampaign(recipients){
+    var id = newId();
+    post({ action:'mktSave', campaign:{ id:id, subject:$('subj').value, body:$('body').value, recipients:recipients } });
+    return id;
+  }
+
+  function logLine(s){
+    var el=$('log'); el.hidden=false;
+    el.textContent += s + '\n'; el.scrollTop = el.scrollHeight;
+  }
+
+  $('testBtn').addEventListener('click', function(){
+    var to = $('testTo').value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){ alert('Please enter a valid address for the test.'); return; }
+    if(!$('subj').value.trim() || !$('body').value.trim()){ alert('Add a subject and a message first.'); return; }
+    var btn=this; btn.disabled=true; btn.textContent='Sending test…';
+    var id = saveCampaign([to]);
+    /* the save is a no-cors POST, so give the sheet a moment before reading it back */
+    setTimeout(function(){
+      fetch(ENDPOINT + '?action=mktTest&id=' + encodeURIComponent(id) + '&to=' + encodeURIComponent(to), { cache:'no-store' })
+        .then(function(r){ return r.text(); })
+        .then(function(t){
+          var d={}; try { d=JSON.parse(t); } catch(e){}
+          btn.disabled=false; btn.textContent='Send test';
+          if(d.ok){ logLine('Test sent to ' + to + (d.quotaLeft!=null ? ' (quota left: '+d.quotaLeft+')' : '')); }
+          else { logLine('Test FAILED: ' + (d.error||'unknown')); alert('Test failed: ' + (d.error||'unknown')); }
+        })
+        .catch(function(e){ btn.disabled=false; btn.textContent='Send test'; logLine('Test failed: '+e.message); });
+    }, 2200);
+  });
+
+  $('sendBtn').addEventListener('click', function(){
+    var list = pickedList();
+    if(!list.length) return;
+    if(!$('subj').value.trim() || !$('body').value.trim()){ alert('Add a subject and a message first.'); return; }
+    if(quotaLeft!=null && list.length > quotaLeft){
+      if(!confirm('You have ' + quotaLeft + ' sends left today but ' + list.length + ' recipients.\n\n'
+                + 'The campaign will send what it can and stop. It is resumable — press Send again tomorrow '
+                + 'and it picks up exactly where it left off, with nobody receiving two copies.\n\nContinue?')) return;
+    }
+    var typed = prompt('This sends a real email to ' + list.length + ' people.\n\n'
+                     + 'Type the number ' + list.length + ' to confirm:');
+    if(String(typed||'').trim() !== String(list.length)) { alert('Not sent.'); return; }
+
+    var btn=this; btn.disabled=true;
+    $('log').textContent=''; $('progWrap').hidden=false;
+    var emails = list.map(function(c){ return c.email; });
+    var id = saveCampaign(emails);
+    logLine('Campaign ' + id + ' · ' + emails.length + ' recipients');
+    logLine('Saving…');
+
+    var total = emails.length, tries = 0;
+    function batch(){
+      fetch(ENDPOINT + '?action=mktSend&id=' + encodeURIComponent(id), { cache:'no-store' })
+        .then(function(r){ return r.text(); })
+        .then(function(t){
+          var d={}; try { d=JSON.parse(t); } catch(e){ throw new Error('unreadable response'); }
+          if(!d.ok){
+            /* the save may not have landed yet - retry a few times before giving up */
+            if(/not found/i.test(d.error||'') && tries++ < 5){ logLine('Waiting for the campaign to save…'); return setTimeout(batch, 2500); }
+            throw new Error(d.error||'unknown');
+          }
+          var done = total - d.remaining;
+          $('prog').style.width = Math.round(done/total*100) + '%';
+          logLine('Sent ' + d.sent + (d.failed?(', failed '+d.failed):'') + (d.skipped?(', skipped '+d.skipped):'')
+                + ' · ' + done + '/' + total + ' done');
+          if(d.quotaLeft!=null) quotaLeft = d.quotaLeft;
+          if(d.remaining > 0){
+            if(d.sent===0 && d.failed===0 && d.skipped===0){
+              logLine('Stopped: no sends left in today’s quota. Press Send again tomorrow to resume.');
+              btn.disabled=false; renderTiles(); return;
+            }
+            setTimeout(batch, 900);
+          } else {
+            logLine('Finished. ' + total + ' processed.');
+            btn.disabled=false; renderTiles();
+          }
+        })
+        .catch(function(e){
+          logLine('Stopped: ' + e.message + ' — nothing was double-sent; press Send again to resume.');
+          btn.disabled=false;
+        });
+    }
+    setTimeout(batch, 2400);
+  });
+
+  $('selAll').addEventListener('click', function(){
+    shown().forEach(function(c){ if(!c.unsubscribed) picked[c.email.toLowerCase()]=1; });
+    renderList(); renderSendWho();
+  });
+  $('selNone').addEventListener('click', function(){ picked={}; renderList(); renderSendWho(); });
+  $('reload').addEventListener('click', load);
+
+  load();
+};
+</script>
+</body>
+</html>
