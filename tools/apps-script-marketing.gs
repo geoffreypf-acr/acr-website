@@ -25,6 +25,20 @@ var MKT_NAME    = 'ACR Automobile';
 var MKT_SECRET  = 'acr-unsub-4f19b2';   // change this and every old unsubscribe link stops working
 var MKT_BATCH   = 25;                   // addresses per request
 
+/* ------------------------------------------------------------------ cache */
+
+/* Building the contact list costs two full-sheet reads plus a Gmail quota
+   lookup - 3 to 5 seconds every time the console opened. Cached for 60s, which
+   makes reopening it instant.
+   Invalidated by hand on every write, so an import or an unsubscribe shows up
+   immediately rather than up to a minute later. */
+var MKT_CACHE_KEY = 'mkt_contacts_v1';
+var MKT_CACHE_TTL = 60;
+
+function mktCacheBust_() {
+  try { CacheService.getScriptCache().remove(MKT_CACHE_KEY); } catch (e) {}
+}
+
 /* ---------------------------------------------------------------- helpers */
 
 function mktSheet_(name, header) {
@@ -176,6 +190,7 @@ function mktImport_(data) {
     added++;
   });
   if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, head.length).setValues(out);
+  mktCacheBust_();
   return { ok: true, added: added, duplicates: dupe, invalid: bad };
 }
 
@@ -189,6 +204,7 @@ function mktSetUnsub_(email, on) {
   for (var i = 1; i < vals.length; i++) {
     if (mktNorm_(vals[i][eCol]) === mktNorm_(email)) {
       sh.getRange(i + 1, uCol + 1).setValue(on ? '1' : '');
+      mktCacheBust_();
       return true;
     }
   }
@@ -197,6 +213,7 @@ function mktSetUnsub_(email, on) {
   var rec = { email: email, name: '', consent: '', unsubscribed: on ? '1' : '',
               tags: '', addedAt: new Date().toISOString(), source: 'unsubscribe', lastSent: '' };
   sh.appendRow(head.map(function (h) { return rec[h] != null ? rec[h] : ''; }));
+  mktCacheBust_();
   return true;
 }
 
@@ -264,6 +281,9 @@ function mktSendBatch_(e) {
 
   var all = String(camp.recipients || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   var already = mktLogged_(id);
+  /* Deliberately NOT cached. This is the check that stops a customer who opted
+     out two minutes ago from receiving the next batch, so it has to read the
+     sheet. Correctness beats the second it costs. */
   var contacts = {};
   mktContacts_().forEach(function (c) { contacts[mktNorm_(c.email)] = c; });
 
@@ -358,8 +378,22 @@ function mktTest_(e) {
 function mktGet_(e) {
   var a = e.parameter.action;
   if (a === 'unsub')    return mktUnsubPage_(e);
-  if (a === 'mktList')  return mktJson_({ ok: true, contacts: mktContacts_(),
-                                          quotaLeft: MailApp.getRemainingDailyQuota() });
+  if (a === 'mktList') {
+    var cache = null;
+    try { cache = CacheService.getScriptCache(); } catch (e) {}
+    if (cache && e.parameter.fresh !== '1') {
+      var hit = cache.get(MKT_CACHE_KEY);
+      if (hit) {
+        return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+    var payload = JSON.stringify({ ok: true, contacts: mktContacts_(),
+                                   quotaLeft: MailApp.getRemainingDailyQuota() });
+    /* A payload over 100KB will not fit in the cache; store what fits and
+       simply recompute next time rather than failing the request. */
+    if (cache) { try { cache.put(MKT_CACHE_KEY, payload, MKT_CACHE_TTL); } catch (e) {} }
+    return ContentService.createTextOutput(payload).setMimeType(ContentService.MimeType.JSON);
+  }
   if (a === 'mktSend')  return mktSendBatch_(e);
   if (a === 'mktTest')  return mktTest_(e);
   return null;

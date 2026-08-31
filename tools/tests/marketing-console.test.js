@@ -27,6 +27,17 @@ const CONTACTS = [
     imported: true, unsubscribed: false, mailable: true, consent: 'Existing customer', tags: 'dealer-list' }
 ];
 
+/* raw enquiry rows, as the CRM sheet returns them - the Ideas tab counts these */
+const recent = n => new Date(Date.now() - n * 864e5).toISOString();
+const ENQUIRIES = [
+  { timestamp: recent(3),  name: 'A', service: 'Meta Trak S5 tracker', make: 'Range Rover', source: 'tracker-installation-kensington', foundVia: 'ChatGPT' },
+  { timestamp: recent(6),  name: 'B', service: 'Meta Trak S7 tracker', make: 'Range Rover', source: 'tracker-installation-kensington', foundVia: 'Google' },
+  { timestamp: recent(9),  name: 'C', service: 'Immobiliser',          make: 'Range Rover', source: 'tracker-installation-chelsea',    foundVia: 'Google' },
+  { timestamp: recent(12), name: 'D', service: 'Apple CarPlay',        make: 'BMW',         source: 'bmw-apple-carplay-london',        foundVia: 'Referral' },
+  { timestamp: recent(15), name: 'E', service: 'Dash camera',          make: 'Audi',        source: 'dash-camera-installation-london', foundVia: '' },
+  { timestamp: recent(400), name: 'Old', service: 'Tracker',           make: 'Ferrari',     source: 'tracker-installation-mayfair',    foundVia: '' }
+];
+
 const html = fs.readFileSync(path.join(REPO, 'marketing-console-a7c93f.html'), 'utf8');
 
 const calls = { get: [], post: [] };
@@ -62,7 +73,8 @@ const dom = new JSDOM(html, {
             remaining: sendState.all.length - sendState.sent.length,
             total: sendState.all.length, quotaLeft: 1500 - sendState.sent.length })) });
       }
-      return Promise.resolve({ ok: true, text: () => Promise.resolve('{}') });
+      // plain GET = the raw enquiry sheet, used by the Ideas tab
+      return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(ENQUIRIES)) });
     };
     // crypto.subtle for the passcode gate
     w.crypto = w.crypto || {};
@@ -198,6 +210,80 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(sendState.sent.length === 2 && new Set(sendState.sent).size === 2,
      'each address was sent exactly once across the batches (got ' + JSON.stringify(sendState.sent) + ')');
   ok(/2\/2 done/.test(log), 'progress was reported per batch');
+
+  /* ---------- offer builder: exact, not paraphrased ---------- */
+  console.log('offer builder');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /offer/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(!d.getElementById('pOffer').hidden, 'the Offer builder tab opens');
+
+    d.getElementById('ofService').value = 'Meta Trak S5 tracker';
+    d.getElementById('ofKind').value = 'amount';
+    d.getElementById('ofValue').value = '150';
+    d.getElementById('ofWho').value = 'Range Rover owners';
+    d.getElementById('ofEnds').value = '2026-09-30';
+    d.getElementById('ofTerms').value = 'One per vehicle. Cannot be combined with another offer.';
+    d.getElementById('ofBuild').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+
+    const subj = d.getElementById('subj').value, body = d.getElementById('body').value;
+    ok(/£150 off Meta Trak S5 tracker/.test(subj), 'subject states the exact amount (got: ' + subj + ')');
+    ok(/£150 off/.test(body), 'the body states the exact amount, not "up to"');
+    ok(!/up to/i.test(body), 'it does NOT soften the discount to "up to"');
+    ok(/30 September 2026/.test(body), 'the end date is spelled out in UK form');
+    ok(body.indexOf('One per vehicle. Cannot be combined with another offer.') > -1,
+       'the terms appear word for word');
+    ok(/Range Rover owners/.test(body), 'the audience is named');
+    ok(/confirmed against your registration/.test(body),
+       'it keeps the site\'s "from price" language rather than implying a fixed total');
+    ok(/come to you/.test(body), 'it does not offer a workshop visit');
+    ok(/\{\{first\}\}/.test(body), 'the merge field survives into Compose');
+    ok(!d.getElementById('pSend').hidden, 'it switches you to Compose');
+
+    // percentage + bundle
+    tabs.find(b => /offer/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    d.getElementById('ofKind').value = 'percent'; d.getElementById('ofValue').value = '10';
+    d.getElementById('ofBuild').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(/10% off/.test(d.getElementById('body').value), 'percentage offers render as a percentage');
+
+    // refuses to build without the essentials
+    tabs.find(b => /offer/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    d.getElementById('ofService').value = ''; d.getElementById('subj').value = 'UNCHANGED';
+    w.alert = () => {};
+    d.getElementById('ofBuild').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(d.getElementById('subj').value === 'UNCHANGED', 'it will not build without a service');
+  }
+
+  /* ---------- ideas: calendar + their own data, nothing invented ---------- */
+  console.log('ideas');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /ideas/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    for (let i = 0; i < 60 && !/your data/i.test(d.getElementById('ideaList').textContent); i++) await wait(50);
+    const txt = d.getElementById('ideaList').textContent;
+
+    ok(d.getElementById('ideaMonth').options.length === 12, 'all twelve months offered');
+    ok(/Timing/.test(txt), 'calendar-based suggestions shown');
+    ok(/your data/i.test(txt), 'suggestions from their own enquiries shown');
+    ok(/Range Rover/.test(txt), 'it names the most-enquired marque from the real rows');
+    ok(/Kensington/.test(txt), 'it names the top area, derived from the source page');
+    ok(/ChatGPT|Google|Referral/.test(txt), 'it reports where those people found them');
+    ok(!/40%|up \d+%|rising|surge/i.test(txt),
+       'no invented statistics or trend claims anywhere in the suggestions');
+
+    const btn = d.getElementById('ideaList').querySelector('[data-idea]');
+    ok(!!btn, 'each suggestion has a "Use this" button');
+    btn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    ok(!d.getElementById('pSend').hidden, 'using an idea switches to Compose');
+    ok(/\{\{first\}\}/.test(d.getElementById('body').value), 'the seed includes the merge field');
+    ok(/\[Write the useful part here/.test(d.getElementById('body').value),
+       'it leaves an explicit gap for you to write, rather than pretending to be finished');
+  }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   dom.window.close();

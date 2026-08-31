@@ -134,6 +134,86 @@
     <div class="empty2" id="listEmpty" hidden>Nothing matches.</div>
   </div>
 
+  <!-- IDEAS -->
+  <div class="panel" id="pIdeas" hidden>
+    <h2>What to write about</h2>
+    <p class="hint">Two sources, both real: the calendar, and your own enquiries. Nothing here is invented &mdash; the counts come from your CRM and the timing notes are fixed dates, not predictions. Pick one and it drops a starting point into Compose.</p>
+    <div class="frow">
+      <div>
+        <label class="fl" for="ideaMonth">Timing</label>
+        <select class="f" id="ideaMonth"></select>
+      </div>
+      <div>
+        <label class="fl" for="ideaWindow">Your data, last</label>
+        <select class="f" id="ideaWindow">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+          <option value="365">12 months</option>
+        </select>
+      </div>
+    </div>
+    <div id="ideaList" class="empty2">Loading your enquiries&hellip;</div>
+  </div>
+
+  <!-- OFFER BUILDER -->
+  <div class="panel" id="pOffer" hidden>
+    <div class="note">
+      <b>Deliberately not AI-written.</b> An offer is a commercial commitment, so this
+      renders exactly what you type &mdash; the discount, the dates and the terms come out
+      word for word rather than paraphrased. Check the preview before sending.
+    </div>
+    <h2>Offer builder</h2>
+    <p class="hint">Fill this in and it writes the email. Everything is editable afterwards in Compose.</p>
+    <div class="frow">
+      <div>
+        <label class="fl" for="ofService">What is the offer on?</label>
+        <input class="f" id="ofService" list="ofServiceList" placeholder="e.g. Meta Trak S5 tracker">
+        <datalist id="ofServiceList">
+          <option>Meta Trak S5 tracker</option>
+          <option>Meta Trak S7 tracker</option>
+          <option>Meta Trak S5 Deadlock</option>
+          <option>Autowatch Ghost II immobiliser</option>
+          <option>Tracker &amp; immobiliser package</option>
+          <option>Front and rear dash camera</option>
+          <option>Apple CarPlay retrofit</option>
+          <option>Porsche PCCM Plus</option>
+        </datalist>
+      </div>
+      <div>
+        <label class="fl" for="ofKind">Offer type</label>
+        <select class="f" id="ofKind">
+          <option value="amount">Amount off</option>
+          <option value="percent">Percentage off</option>
+          <option value="bundle">Two things, one price</option>
+          <option value="addon">Free add-on</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl" for="ofValue">Detail</label>
+        <input class="f" id="ofValue" placeholder="e.g. 150">
+      </div>
+    </div>
+    <div class="frow">
+      <div>
+        <label class="fl" for="ofWho">Which cars or customers? (optional)</label>
+        <input class="f" id="ofWho" placeholder="e.g. Range Rover and Defender owners">
+      </div>
+      <div>
+        <label class="fl" for="ofEnds">Offer ends</label>
+        <input class="f" id="ofEnds" type="date">
+      </div>
+    </div>
+    <div>
+      <label class="fl" for="ofTerms">Terms to state (optional, printed word for word)</label>
+      <textarea class="f" id="ofTerms" style="min-height:80px" placeholder="e.g. One per vehicle. Cannot be combined with another offer."></textarea>
+    </div>
+    <div class="sel-bar" style="margin-top:14px">
+      <button class="btn2 primary" id="ofBuild">Write the email</button>
+      <span class="hint" style="margin:0">It goes into Compose, ready to preview and test.</span>
+    </div>
+  </div>
+
   <!-- IMPORT -->
   <div class="panel" id="pImport" hidden>
     <h2>Import contacts</h2>
@@ -258,7 +338,8 @@ window.__mktStart = function(){
   ];
   var seg = 'cust';
 
-  var TABS = [ {k:'list',label:'Contacts'}, {k:'import',label:'Import'}, {k:'send',label:'Compose & send'} ];
+  var TABS = [ {k:'list',label:'Contacts'}, {k:'ideas',label:'Ideas'}, {k:'offer',label:'Offer builder'},
+               {k:'import',label:'Import'}, {k:'send',label:'Compose & send'} ];
   var tab = 'list';
 
   var TEMPLATES = {
@@ -282,20 +363,53 @@ window.__mktStart = function(){
 
   /* ------------------------------------------------------------------ data */
 
-  function load(){
-    $('sub').textContent = 'Loading contacts…';
-    fetch(ENDPOINT + '?action=mktList', { cache:'no-store' })
+  /* Building the list server-side costs a few seconds, so the console used to
+     sit on "Loading contacts..." every time it opened. Paint the last known
+     list from localStorage first - the screen is usable immediately - then
+     refresh in the background and repaint. `fresh` forces past the server's
+     own 60s cache when Refresh is pressed by hand. */
+  var CACHE_KEY = 'acr_mkt_contacts';
+
+  function paint(d, cached){
+    contacts = d.contacts || [];
+    quotaLeft = (d.quotaLeft==null) ? null : d.quotaLeft;
+    renderAll();
+    if(cached){
+      var age = d.__at ? Math.round((Date.now() - d.__at)/1000) : null;
+      $('sub').textContent += age!=null
+        ? ' · showing a copy from ' + (age < 90 ? age + 's' : Math.round(age/60) + ' min') + ' ago, refreshing…'
+        : ' · refreshing…';
+    }
+  }
+
+  function load(force){
+    var shown = false;
+    if(!force){
+      try {
+        var raw = localStorage.getItem(CACHE_KEY);
+        if(raw){
+          var c = JSON.parse(raw);
+          if(c && c.contacts && c.contacts.length){ paint(c, true); shown = true; }
+        }
+      } catch(e){}
+    }
+    if(!shown) $('sub').textContent = 'Loading contacts…';
+
+    fetch(ENDPOINT + '?action=mktList' + (force ? '&fresh=1' : ''), { cache:'no-store' })
       .then(function(r){ return r.text(); })
       .then(function(t){
         var d;
         try { d = JSON.parse(t); } catch(e){ throw new Error('The script returned a page instead of data — has the new version been deployed?'); }
         if(!d.ok) throw new Error(d.error || 'unknown error');
-        contacts = d.contacts || [];
-        quotaLeft = (d.quotaLeft==null) ? null : d.quotaLeft;
-        renderAll();
+        paint(d, false);
+        try { d.__at = Date.now(); localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch(e){}
       })
       .catch(function(err){
-        $('sub').textContent = 'Could not load: ' + err.message;
+        /* If a stale copy is already on screen, keep it and say so rather than
+           blanking a usable list. */
+        $('sub').textContent = shown
+          ? ($('sub').textContent.replace(/ · refreshing…$/,'') + ' · could not refresh: ' + err.message)
+          : 'Could not load: ' + err.message;
       });
   }
 
@@ -351,8 +465,11 @@ window.__mktStart = function(){
   }
   function syncTabs(){
     $('pList').hidden   = tab!=='list';
+    $('pIdeas').hidden  = tab!=='ideas';
+    $('pOffer').hidden  = tab!=='offer';
     $('pImport').hidden = tab!=='import';
     $('pSend').hidden   = tab!=='send';
+    if(tab==='ideas') renderIdeas();
   }
 
   function renderSegs(){
@@ -419,6 +536,7 @@ window.__mktStart = function(){
     contacts.forEach(function(c){ if(c.email.toLowerCase()===email.toLowerCase()){ c.unsubscribed=on; c.mailable=!on; } });
     delete picked[email.toLowerCase()];
     post({ action:'mktUnsub', email:email, on:on });
+    try { localStorage.removeItem(CACHE_KEY); } catch(e){}
     renderAll();
   }
 
@@ -471,7 +589,8 @@ window.__mktStart = function(){
       return { email:r.email, name:r.name, consent:consent, tags:tags, source:'import' };
     })});
     $('impText').value=''; $('impPrev').textContent='Imported — refreshing…';
-    setTimeout(load, 1800);
+    try { localStorage.removeItem(CACHE_KEY); } catch(e){}
+    setTimeout(function(){ load(true); }, 1800);
   });
 
   /* --------------------------------------------------------------- compose */
@@ -512,6 +631,246 @@ window.__mktStart = function(){
       + (paras || '<p style="color:#999">Nothing written yet.</p>')
       + '<hr><div class="ft">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR '
       + '&middot; <span style="text-decoration:underline">Unsubscribe</span></div>';
+  }
+
+  /* ----------------------------------------------------------- offer builder */
+
+  /* Renders exactly what was typed. No paraphrasing: the discount, the dates
+     and the terms are a commercial commitment, and "up to GBP 150" instead of
+     "GBP 150 off" is the kind of softening that has to be honoured later. */
+  function money(v){
+    var n = String(v||'').replace(/[^0-9.]/g,'');
+    return n ? '£' + Number(n).toLocaleString('en-GB') : '';
+  }
+  function ukDate(iso){
+    if(!iso) return '';
+    var p = String(iso).split('-');
+    if(p.length!==3) return iso;
+    var months = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+    var d = parseInt(p[2],10), m = parseInt(p[1],10)-1;
+    if(isNaN(d) || !months[m]) return iso;
+    return d + ' ' + months[m] + ' ' + p[0];
+  }
+
+  function buildOffer(){
+    var svc   = ($('ofService').value||'').trim();
+    var kind  = $('ofKind').value;
+    var val   = ($('ofValue').value||'').trim();
+    var who   = ($('ofWho').value||'').trim();
+    var ends  = $('ofEnds').value;
+    var terms = ($('ofTerms').value||'').trim();
+
+    if(!svc){ alert('What is the offer on?'); $('ofService').focus(); return; }
+    if(!val){ alert('Add the detail — the amount, the percentage, or what is included.'); $('ofValue').focus(); return; }
+
+    var headline, subject;
+    if(kind==='amount'){
+      var m = money(val);
+      if(!m){ alert('Enter the amount as a number, e.g. 150.'); $('ofValue').focus(); return; }
+      headline = m + ' off ' + svc;
+      subject  = m + ' off ' + svc + ' at ACR Automobile';
+    } else if(kind==='percent'){
+      var pc = String(val).replace(/[^0-9.]/g,'');
+      if(!pc){ alert('Enter the percentage as a number, e.g. 10.'); $('ofValue').focus(); return; }
+      headline = pc + '% off ' + svc;
+      subject  = pc + '% off ' + svc + ' at ACR Automobile';
+    } else if(kind==='bundle'){
+      headline = svc + ' and ' + val + ' fitted together';
+      subject  = svc + ' and ' + val + ' — one price, one visit';
+    } else {
+      headline = svc + ' with ' + val + ' included';
+      subject  = svc + ' — ' + val + ' included';
+    }
+
+    var p = [];
+    p.push('Hi {{first}},');
+    p.push('We are running something you may want to know about: <strong>' + headline + '</strong>'
+           + (who ? ', for ' + who : '') + '.');
+
+    if(kind==='bundle'){
+      p.push('Doing both on the same visit means the trim comes out once instead of twice, '
+           + 'and it costs less than booking them separately.');
+    } else if(kind==='addon'){
+      p.push('The ' + val + ' is included rather than charged as an extra.');
+    }
+
+    /* Every price on the site is a "from" figure confirmed against the
+       registration. Saying otherwise here would contradict the whole site. */
+    p.push('As always the price is confirmed against your registration before you book, '
+         + 'so there is nothing to work out on the day. We come to you — home, office or '
+         + 'storage, anywhere in London, Surrey and the Home Counties — and insurance '
+         + 'certification is issued at the appointment.');
+
+    if(ends) p.push('The offer runs until <strong>' + ukDate(ends) + '</strong>.');
+    p.push('If you would like it on your car, just reply to this email and we will check it '
+         + 'against your vehicle and come back with a firm price.');
+    if(terms) p.push('Terms: ' + terms);
+    p.push('Kind regards,\nACR Automobile');
+
+    $('subj').value = subject;
+    $('body').value = p.join('\n\n').replace(/<\/?strong>/g,'');
+    tab = 'send'; renderTabs(); renderPreview();
+    window.scrollTo(0,0);
+  }
+  $('ofBuild').addEventListener('click', buildOffer);
+
+  /* ------------------------------------------------------------------- ideas */
+
+  /* Fixed calendar facts, not forecasts. Each is something that is true of that
+     month every year, and that an owner can act on. */
+  var SEASON = {
+    0:  ['Batteries fail in the first cold snap — and a stored car with a hard-wired tracker is the one that will not start.',
+         'New year insurance renewals: a Thatcham certificate is the thing renewals ask for.'],
+    1:  ['Half term — cars left at airports for a week.',
+         'Salt and short trips: the worst combination for a marginal battery.'],
+    2:  ['Clocks go forward at the end of the month; the evening theft window shortens.',
+         'Cars coming out of winter storage — the moment to check what the battery did while it sat.'],
+    3:  ['Easter holidays: airport long-stay car parks fill up.',
+         'Spring is when stored and weekend cars come back out.'],
+    4:  ['Dry weekends — the classics and weekend cars start moving again.',
+         'Good month for a CarPlay retrofit before the summer driving starts.'],
+    5:  ['Ascot week changes the roads around SL5 for several days.',
+         'Wimbledon begins at the end of the month; SW19 parking gets restricted.'],
+    6:  ['Wimbledon fortnight — closures and suspended bays across SW19.',
+         'School holidays begin: cars sitting at airports for two or three weeks.'],
+    7:  ['Notting Hill Carnival closes large parts of W11 over the bank holiday weekend.',
+         'Peak holiday month — the emptiest driveways of the year.'],
+    8:  ['Back to school, and the evenings start drawing in.',
+         'The month to sort security before the dark half of the year.'],
+    9:  ['Clocks go back at the end of October — the single biggest change in the year for opportunist theft, because cars are now parked in the dark from late afternoon.',
+         'Dark evenings: this is the most useful email of the year to send.'],
+    10: ['The darkest weeks. Cars parked in the dark at both ends of the day.',
+         'Christmas shopping — valuables left in cars in multi-storey car parks.'],
+    11: ['Cars loaded with presents, parked in the dark.',
+         'Winter storage: the battery conversation before a car sits until March.']
+  };
+  var MONTHS = ['January','February','March','April','May','June','July','August',
+                'September','October','November','December'];
+
+  var enquiries = null;
+
+  function loadEnquiries(){
+    if(enquiries) return Promise.resolve(enquiries);
+    return fetch(ENDPOINT, { cache:'no-store' })
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        var rows = JSON.parse(t);
+        enquiries = Array.isArray(rows) ? rows : (rows.enquiries||[]);
+        return enquiries;
+      });
+  }
+
+  /* Same buckets the CRM uses, so the two screens never disagree. */
+  var CATS = [
+    ['Trackers &amp; immobilisers', /tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security/i],
+    ['Apple CarPlay',               /carplay|car ?play|android auto|pccm/i],
+    ['Dash cameras',                /dash ?cam|thinkware/i],
+    ['BMW &amp; MINI software',     /idrive|i-drive|coding|software recovery/i],
+    ['Battery &amp; recovery',      /battery|recovery|jump ?start/i],
+    ['Concierge',                   /concierge|storage|detailing|chauffeur|sourcing/i]
+  ];
+  function catOf(r){
+    var hay = [r.service, r.source, r.details].join(' ');
+    for(var i=0;i<CATS.length;i++) if(CATS[i][1].test(hay)) return CATS[i][0];
+    return '';
+  }
+  function areaOf(r){
+    var m = /tracker-installation-([a-z-]+)/.exec(String(r.source||''));
+    if(!m) return '';
+    return m[1].split('-').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+  }
+  function topOf(rows, fn, n){
+    var m = {};
+    rows.forEach(function(r){ var k = (fn(r)||'').trim(); if(k) m[k]=(m[k]||0)+1; });
+    return Object.keys(m).map(function(k){ return [k,m[k]]; })
+      .sort(function(a,b){ return b[1]-a[1]; }).slice(0, n||3);
+  }
+
+  function useIdea(title, seed){
+    $('subj').value = title;
+    $('body').value = 'Hi {{first}},\n\n' + seed + '\n\n'
+      + '[Write the useful part here. One thing an owner can actually do.]\n\n'
+      + 'If you would like us to look at your car, reply to this email and we will come back to you.\n\n'
+      + 'Kind regards,\nACR Automobile';
+    tab = 'send'; renderTabs(); renderPreview();
+    window.scrollTo(0,0);
+  }
+
+  function renderIdeas(){
+    var sel = $('ideaMonth');
+    if(!sel.options.length){
+      var now = new Date().getMonth();
+      sel.innerHTML = MONTHS.map(function(m,i){
+        return '<option value="'+i+'"'+(i===now?' selected':'')+'>'+m+(i===now?' (this month)':'')+'</option>';
+      }).join('');
+      sel.onchange = renderIdeas;
+      $('ideaWindow').onchange = renderIdeas;
+    }
+    var mi = +sel.value;
+    var out = [];
+    (SEASON[mi]||[]).forEach(function(txt){
+      out.push({ tag:'Timing · '+MONTHS[mi], text:txt,
+                 title:MONTHS[mi]+' — a note from ACR Automobile', seed:txt });
+    });
+
+    var box = $('ideaList');
+    function paint(){
+      box.innerHTML = out.map(function(o,i){
+        return '<div style="border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 13px;margin-bottom:9px">'
+          + '<div style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">'+esc(o.tag)+'</div>'
+          + '<div style="font-size:13.5px;line-height:1.55;color:var(--text-secondary)">'+o.text+'</div>'
+          + '<button class="btn2" data-idea="'+i+'" style="height:30px;padding:0 11px;font-size:12px;margin-top:10px">Use this</button>'
+          + '</div>';
+      }).join('');
+      box.querySelectorAll('[data-idea]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var o = out[+b.getAttribute('data-idea')];
+          useIdea(o.title, o.seed.replace(/<[^>]+>/g,''));
+        });
+      });
+    }
+    paint();
+
+    loadEnquiries().then(function(rows){
+      var days = +$('ideaWindow').value || 90;
+      var since = new Date(Date.now() - days*864e5);
+      var recent = rows.filter(function(r){
+        var d = r.timestamp ? new Date(r.timestamp) : null;
+        return d && !isNaN(d) && d >= since;
+      });
+      if(!recent.length){ paint(); return; }
+      var label = 'your data · last ' + days + ' days';
+
+      topOf(recent, catOf, 2).forEach(function(c){
+        out.push({ tag:label, text:'<strong>'+c[1]+'</strong> '+c[0]+' enquiries. Enough interest to write to the list about it.',
+                   title:'A note about ' + c[0].replace(/&amp;/g,'&').toLowerCase(),
+                   seed:'We have had a run of '+c[0].replace(/&amp;/g,'&').toLowerCase()+' enquiries lately, so this is worth a short note.' });
+      });
+      topOf(recent, function(r){ return r.make; }, 2).forEach(function(m){
+        out.push({ tag:label, text:'<strong>'+m[1]+'</strong> '+esc(m[0])+' enquiries. A marque-specific email tends to read as advice rather than marketing.',
+                   title:esc(m[0]) + ' owners — one thing worth knowing',
+                   seed:'This one is for '+esc(m[0])+' owners in particular.' });
+      });
+      topOf(recent, areaOf, 2).forEach(function(a){
+        out.push({ tag:label, text:'<strong>'+a[1]+'</strong> enquiries from '+esc(a[0])+'. A local email to that postcode usually lands well.',
+                   title:esc(a[0]) + ' — a note from ACR Automobile',
+                   seed:'A short note for owners around '+esc(a[0])+'.' });
+      });
+      var fv = topOf(recent, function(r){ return r.foundVia; }, 3);
+      if(fv.length){
+        out.push({ tag:label, text:'People are finding you via '
+                   + fv.map(function(f){ return '<strong>'+esc(f[0])+'</strong> ('+f[1]+')'; }).join(', ')
+                   + '. Worth knowing where the list actually came from before you write to it.',
+                   title:'A quick update from ACR Automobile',
+                   seed:'A short update from us.' });
+      }
+      paint();
+    }).catch(function(){
+      out.push({ tag:'your data', text:'Could not read your enquiries just now — the timing notes above still apply.',
+                 title:MONTHS[mi]+' — a note from ACR Automobile', seed:'' });
+      paint();
+    });
   }
 
   /* ------------------------------------------------------------ test &amp; send */
@@ -609,7 +968,7 @@ window.__mktStart = function(){
     renderList(); renderSendWho();
   });
   $('selNone').addEventListener('click', function(){ picked={}; renderList(); renderSendWho(); });
-  $('reload').addEventListener('click', load);
+  $('reload').addEventListener('click', function(){ load(true); });
 
   load();
 };
