@@ -185,7 +185,7 @@
           timestamp: stamp,
           name: d.Name || '', mobile: d.Mobile || '', email: d.Email || '', postcode: d.Postcode || '',
           make: d.Make || '', model: d.Model || '', year: d.Year || '', trim: d.Trim || '', fuel: d.Fuel || '', registration: d.Registration || '',
-          interested: d['Interested in'] || '', service: d['Interested in'] || '', preferredReply: d['Preferred reply'] || '',
+          interested: d['Interested in'] || '', service: d['Interested in'] || '', preferredReply: d['Preferred reply'] || '', foundVia: d['How did you find us?'] || '',
           source: location.pathname.replace(/^.*\//, '') || 'index.html'
         };
         /* text/plain avoids a CORS preflight so Apps Script accepts it; we don't need to read the response */
@@ -198,14 +198,22 @@
     }
 
     subBtn.addEventListener('click', function () {
+      /* The final panel has no Next button, so stepValid() never runs against
+         it - this field has to be checked here or it would not be mandatory. */
+      var fnd = form.querySelector('[data-found]');
+      if (fnd && !(fnd.value || '').trim()) {
+        showErr('Please tell us how you found us \u2014 it helps us more than you\u2019d think.', fnd);
+        return;
+      }
       var interest = interests();
       if (form.querySelector('input[data-interest]') && !interest.length) { showErr('Please choose at least one service you’re interested in.'); return; }
       var d = { Name: fullName(), Mobile: get('mobile'), Email: get('email'), Postcode: get('postcode'), Make: get('make'), Model: get('model'), Year: get('year'), Trim: get('trim'), Fuel: get('fuel'), Registration: get('reg') };
       d['Interested in'] = interest.join(', ') || '—';
       d['Preferred reply'] = via() === 'whatsapp' ? 'WhatsApp' : 'Email';
+      d['How did you find us?'] = get('found');
       /* Year was missing here, so the WhatsApp message left it out even though the
          form makes it mandatory and both the CRM and the email copy record it. */
-      var order = ['Name', 'Mobile', 'Email', 'Postcode', 'Make', 'Model', 'Year', 'Trim', 'Fuel', 'Registration', 'Interested in', 'Preferred reply'];
+      var order = ['Name', 'Mobile', 'Email', 'Postcode', 'Make', 'Model', 'Year', 'Trim', 'Fuel', 'Registration', 'Interested in', 'How did you find us?', 'Preferred reply'];
       var lines = [];
       order.forEach(function (k) { if (d[k] && d[k] !== '—' || k === 'Interested in' || k === 'Preferred reply') lines.push(k + ': ' + d[k]); });
       var text = 'New enquiry from acrautomobile.com' + NL + NL + lines.join(NL);
@@ -221,7 +229,7 @@
            title picker instead of ending up with "Mr Mr Alex Marin". */
         var q = { title: titleVal(), first: get('name'), surname: get('surname'), email: d.Email, mobile: d.Mobile,
                   postcode: d.Postcode, make: d.Make, model: d.Model, year: d.Year,
-                  via: via(), key: crmKey };
+                  via: via(), key: crmKey, found: get('found') };
         var also = interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ');
         if (also) q.also = also;
         var hp = new URLSearchParams();

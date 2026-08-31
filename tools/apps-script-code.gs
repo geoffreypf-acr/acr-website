@@ -53,7 +53,7 @@ function doPost(e) {
       // 'updated' and 'chasedAt' are written by the CRM on every change and every
       // chase. Apps Script only writes columns that exist, so they are listed here
       // and created on first use - no hand-editing of the sheet header.
-      ['status', 'value', 'followup', 'followups', 'owner', 'notes', 'deleted', 'category',
+      ['status', 'value', 'followup', 'followups', 'owner', 'notes', 'deleted', 'category', 'foundVia',
        'updated', 'chasedAt', 'deposit'].forEach(function (c) {
         if (header.indexOf(c) === -1) { header.push(c); sheet.getRange(1, header.length).setValue(c); }
       });
@@ -79,7 +79,7 @@ function doPost(e) {
              || SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
     var COLS = ['timestamp', 'name', 'mobile', 'email', 'postcode', 'make', 'model',
                 'trim', 'fuel', 'registration', 'service', 'preferredReply', 'source',
-                'year', 'location', 'urgency', 'details'];
+                'year', 'location', 'urgency', 'details', 'foundVia'];
     var lastCol = sh.getLastColumn();
     var header = lastCol ? sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); }) : [];
     if (!header.length) { header = COLS.slice(); sh.getRange(1, 1, 1, header.length).setValues([header]); }

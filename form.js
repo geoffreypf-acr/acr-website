@@ -49,7 +49,8 @@
       year: F('Year'),
       location: F('Location'),
       urgency: F('Urgency'),
-      details: F('Details', 'Message', 'Subject', 'Also interested in')
+      details: F('Details', 'Message', 'Subject', 'Also interested in'),
+      foundVia: F('How did you find us?')
     };
     /* text/plain avoids a CORS preflight so Apps Script accepts it */
     try {
@@ -125,6 +126,16 @@
 
   /* Every form now requires an email address. A mobile alone left us unable to
      send a written quote, and phone tag is where enquiries went quiet. */
+  /* How they found us is mandatory too. It is the only field that tells us
+     whether an enquiry came from search or from an AI assistant, and once a
+     lead is in the CRM there is no way to recover it retrospectively. */
+  function badFound(form) {
+    var el = form && form.querySelector('[data-found]');
+    if (!el) return null;
+    if ((el.value || '').trim()) return null;
+    return { msg: 'Please tell us how you found us \u2014 it helps us more than you\u2019d think.', el: el };
+  }
+
   var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   function badEmail(v) {
     v = (v || '').trim();
@@ -439,6 +450,9 @@
         if (emBad) { showError(emBad, emEl); return; }
       }
 
+      var noFound = badFound(form);
+      if (noFound) { showError(noFound.msg, noFound.el); return; }
+
       var interest = Array.prototype.slice.call(form.querySelectorAll('input[name="interest"]:checked')).map(function (c) { return c.value; });
       if (form.querySelector('input[name="interest"]') && !interest.length) {
         showError('Please choose at least one service you\u2019re interested in.');
@@ -476,6 +490,7 @@
           email: fields['Email'], mobile: fields['Mobile'],
           postcode: fields['Postcode'], make: fields['Make'], model: fields['Model'],
           year: fields['Year'], via: via, key: crmKey,
+          found: fields['How did you find us?'],
           also: interest.filter(function (v) { return !DASHCAM.test(v); }).join(', ')
         };
         Object.keys(carry).forEach(function (k) { if (carry[k] && carry[k] !== '—') hq.set(k, carry[k]); });
@@ -538,6 +553,8 @@
       set(dt, q.get('mobile')); set(dpc, q.get('postcode'));
       var tEl = form.querySelector('[data-title]');
       if (tEl && q.get('title') && !tEl.value) tEl.value = q.get('title');
+      var fEl = form.querySelector('[data-found]');
+      if (fEl && q.get('found') && !fEl.value) fEl.value = q.get('found');
       alsoWanted = q.get('also') || '';
       carriedKey = q.get('key') || '';
       var viaWanted = q.get('via');

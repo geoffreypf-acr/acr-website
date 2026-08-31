@@ -371,6 +371,11 @@
     <button type="button" class="crm-btn" id="bulkNone">Clear</button>
   </div>
 
+<style>
+  /* "via Google" / "via ChatGPT" on a card - distinct from the category chips
+     so the source is scannable down a column. */
+  .chip.found{ background:rgba(90,140,255,.14); border-color:rgba(120,160,255,.42); color:#bcd0ff; }
+</style>
   <div class="dash" id="dash" hidden>
     <label class="dash-opt"><input type="checkbox" id="dashArch"> Include archived</label>
     <div class="dash-tiles" id="dashTiles"></div>
@@ -378,6 +383,7 @@
       <div class="dcard"><h3>Enquiries by stage</h3><div class="bars" id="chStage"></div></div>
       <div class="dcard"><h3>By category</h3><div class="bars" id="chSource"></div></div>
       <div class="dcard"><h3>How they reached us</h3><div class="bars" id="chService"></div></div>
+      <div class="dcard"><h3>Where they came from</h3><div class="bars" id="chFound"></div></div>
       <div class="dcard">
         <div class="dcard-h">
           <h3 id="chWeeksTitle">Enquiries, last 8 weeks</h3>
@@ -415,6 +421,7 @@
       <select id="dStatus"></select>
     </div>
     <div class="dfield"><label>Category</label><select id="dCategory"></select></div>
+    <div class="dfield"><label>Where they found us</label><select id="dFound"></select></div>
     <div class="dfield"><label>Deal value (£)</label><input id="dValue" inputmode="decimal" placeholder="e.g. 899"></div>
     <div class="dfield"><label>Follow-up date</label>
       <input id="dFollowup" type="date">
@@ -503,6 +510,14 @@ window.__crmStart = function(){
      it previously sat higher up the file and threw on `CATS.map` before the
      array existed, which killed the whole script and blanked the page. */
   (function(){
+    var sel=$('dFound'); if(!sel) return;
+    var blank=document.createElement('option'); blank.value=''; blank.textContent='Not recorded';
+    sel.appendChild(blank);
+    ['Google','ChatGPT','Claude','Gemini','Referral','Other'].forEach(function(name){
+      var o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
+    });
+  })();
+  (function(){
     var sel=$('dCategory'); if(!sel) return;
     var auto=document.createElement('option'); auto.value=''; auto.textContent='Auto — from the enquiry';
     sel.appendChild(auto);
@@ -547,6 +562,20 @@ window.__crmStart = function(){
     if(key === 'whatsapp') return pref === 'whatsapp';
     if(key === 'email')    return src === 'gmail' || pref === 'email' || (!!(e.email||'').toString().trim() && !pref);
     return true;
+  }
+
+  /* Where the customer says they found us - the form's "How did you find us?"
+     answer. Rows created before that field existed have nothing to report, so
+     they are counted separately rather than guessed at: an invented source is
+     worse than an honest gap. */
+  var FOUND = ['Google','ChatGPT','Claude','Gemini','Referral'];
+  function foundOf(e){
+    var v = (e.foundVia || '').toString().trim();
+    if(!v) return '';
+    for(var i=0;i<FOUND.length;i++){
+      if(FOUND[i].toLowerCase() === v.toLowerCase()) return FOUND[i];
+    }
+    return v;                       /* anything typed by hand shows as-is */
   }
 
   /* How the enquiry reached us. */
@@ -1177,6 +1206,20 @@ window.__crmStart = function(){
     bars('chStage',   STAGES.map(function(st){ return [st.key, live.filter(function(e){ return statusOf(e)===st.key; }).length]; }), '', 0);
     bars('chSource',  cnt(live, categoryOf), '', 8);
     bars('chService', cnt(live, channelOf));
+    var known = live.filter(function(e){ return foundOf(e); });
+    var foundPairs = cnt(known, foundOf);
+    bars('chFound', foundPairs, '', 0);
+    var fEl = $('chFound');
+    if(fEl){
+      var noAnswer = live.length - known.length;
+      if(!known.length){
+        fEl.innerHTML = '<div class="empty">No answers yet \u2014 the form field is new, so this fills up as enquiries come in.</div>';
+      } else if(noAnswer){
+        fEl.insertAdjacentHTML('beforeend',
+          '<div class="empty" style="margin-top:8px">' + noAnswer + ' earlier record'
+          + (noAnswer===1?'':'s') + ' predate the question.</div>');
+      }
+    }
     var range = localStorage.getItem('acr_crm_range') || '8w';
     var cols = buckets_(range, now).map(function(b){
       return [b.label, live.filter(function(e){ var d=ts(e); return d && d>=b.from && d<b.to; }).length];
@@ -1322,6 +1365,9 @@ window.__crmStart = function(){
         var iv=(e.invoiceRef||'').toString().trim();
         if(iv) chips.push('<span class="chip inv">'+esc(iv)+'</span>');
         var cat=categoryOf(e); if(cat) chips.push('<span class="chip">'+esc(cat)+'</span>');
+        /* Where they say they found us - the single most useful thing on the card
+           for deciding where the next marketing pound goes. */
+        var fnd=foundOf(e); if(fnd) chips.push('<span class="chip found" title="Found us via '+esc(fnd)+'">via '+esc(fnd)+'</span>');
         var age=ageChip(e); if(age) chips.push('<span class="chip age" title="'+esc(age.title)+'">'+esc(age.text)+'</span>');
         var ch=channelOf(e), pcv=prefContact(e);
         /* don't print the same word twice - a phone lead replied to by phone
@@ -1573,6 +1619,12 @@ window.__crmStart = function(){
     })();
     $('dStatus').value = statusOf(e);
     $('dCategory').value = categoryLegacy_((e.category||'').toString().trim());
+    var fv=foundOf(e), fSel=$('dFound');
+    /* a hand-typed value that is not in the list must not silently vanish */
+    if(fv && !Array.prototype.some.call(fSel.options, function(o){ return o.value===fv; })){
+      var extra=document.createElement('option'); extra.value=fv; extra.textContent=fv; fSel.appendChild(extra);
+    }
+    fSel.value = fv;
     $('dValue').value = e.value||'';
     $('dFollowup').value = e.followup ? String(e.followup).slice(0,10) : '';
     $('dOwner').value = e.owner||'';
@@ -1601,8 +1653,8 @@ window.__crmStart = function(){
   });
   $('dSave').addEventListener('click', function(){
     if(!current) return;
-    current.status=$('dStatus').value; current.category=$('dCategory').value; current.value=$('dValue').value; current.followup=$('dFollowup').value; current.owner=$('dOwner').value; current.notes=$('dNotes').value; current.followups=fnumVal||'';
-    save(current.timestamp, { status:current.status, category:current.category, value:current.value, followup:current.followup, owner:current.owner, notes:current.notes, followups:current.followups });
+    current.status=$('dStatus').value; current.category=$('dCategory').value; current.foundVia=$('dFound').value; current.value=$('dValue').value; current.followup=$('dFollowup').value; current.owner=$('dOwner').value; current.notes=$('dNotes').value; current.followups=fnumVal||'';
+    save(current.timestamp, { status:current.status, category:current.category, foundVia:current.foundVia, value:current.value, followup:current.followup, owner:current.owner, notes:current.notes, followups:current.followups });
     render();
     /* Close on save. Leaving the record open after saving meant closing it by hand
        every time, and made it easy to wonder whether the save had taken. The tick
