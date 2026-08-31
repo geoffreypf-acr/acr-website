@@ -317,6 +317,7 @@ jo@example.com, Jo Patel"></textarea>
           <option value="news">Newsletter</option>
           <option value="update">Service update</option>
           <option value="offer">Offer / new service</option>
+          <option value="referral">Referral scheme</option>
         </select>
       </div>
       <div>
@@ -329,6 +330,18 @@ jo@example.com, Jo Patel"></textarea>
     <textarea class="f" id="body" placeholder="Hi {{first}},"></textarea>
 
     <div class="frow" style="margin-top:14px">
+      <div style="flex:1 1 320px">
+        <label class="fl" for="imgUrl">Photo (optional) — paste a URL</label>
+        <input class="f" id="imgUrl" placeholder="https://acrautomobile.com/assets/…jpg">
+      </div>
+      <div>
+        <label class="fl" for="imgAlt">Describe the photo</label>
+        <input class="f" id="imgAlt" placeholder="e.g. Meta Trak S5 fitted to a Range Rover">
+      </div>
+    </div>
+    <div class="note" id="imgNote" hidden style="margin-bottom:14px"></div>
+
+    <div class="frow">
       <div>
         <label class="fl" for="prevWho">Preview as</label>
         <select class="f" id="prevWho"></select>
@@ -409,6 +422,18 @@ window.__mktStart = function(){
             b:'Hi {{first}},\n\nA quick note about your vehicle security.\n\n'
              +'Explain the change here — what it is, whether it affects them, and what they need to do '
              +'(ideally nothing).\n\nAny questions, reply to this email and it comes straight to us.\n\n'
+             +'Kind regards,\nACR Automobile' },
+    referral: { s:'£50–£75 when you recommend us',
+            b:'Hi {{first}},\n\n'
+             +'Most of our work comes by recommendation rather than advertising, so we pay for it.\n\n'
+             +'If you send someone our way and we fit a tracker or an immobiliser for them, '
+             +'you get £50 on installations under £1,000 and £75 on installations of £1,000 and above. '
+             +'Paid by bank transfer once the job is completed. There is no limit on how many people you refer.\n\n'
+             +'It applies to trackers and immobilisers only, and all you need to send us is a name and a '
+             +'mobile number — we do the rest, and we will keep you out of it from there.\n\n'
+             +'If you look after vehicles as a business — a dealer, a garage, a detailer, storage, '
+             +'transport or a chauffeur company — we do trade rates instead, confirmed directly.\n\n'
+             +'Just reply to this email with a name and number, or send it over on WhatsApp.\n\n'
              +'Kind regards,\nACR Automobile' },
     offer: { s:'Now available at ACR Automobile',
             b:'Hi {{first}},\n\nWe have added something you may want to know about.\n\n'
@@ -645,7 +670,12 @@ window.__mktStart = function(){
     renderReady();
   }
 
-  function stamp(){ return ($('subj').value||'') + '\u0000' + ($('body').value||''); }
+  function stamp(){
+    /* the photo is part of what gets sent, so changing it means the test no
+       longer covers what would go out */
+    return ($('subj').value||'') + '\u0000' + ($('body').value||'')
+         + '\u0000' + imgUrl() + '\u0000' + ($('imgAlt').value||'');
+  }
 
   /* Four things have to be true before a send is a good idea. Showing them tick
      off turns a slightly frightening button into a sequence you have finished -
@@ -873,7 +903,7 @@ window.__mktStart = function(){
     if(!t) return;
     if($('body').value.trim() && !confirm('Replace what you have written?')) { $('tpl').value=''; return; }
     $('subj').value = t.s; $('body').value = t.b;
-    renderPreview();
+    renderPreview(); renderReady();
   });
   $('subj').addEventListener('input', function(){ renderPreview(); renderReady(); });
   $('body').addEventListener('input', function(){ renderPreview(); renderReady(); });
@@ -892,15 +922,48 @@ window.__mktStart = function(){
     return String(txt||'').replace(/\{\{\s*first\s*\}\}/gi, first).replace(/\{\{\s*name\s*\}\}/gi, name);
   }
 
+  /* Images in email: hosted URL only. Gmail strips data: URIs, and a great many
+     clients block remote images until the reader allows them - so a photo can
+     add to a message but must never carry anything essential. */
+  function imgUrl(){
+    var v = ($('imgUrl').value||'').trim();
+    return /^https:\/\/\S+\.(jpe?g|png|webp|gif)(\?\S*)?$/i.test(v) ? v : '';
+  }
+  function checkImg(){
+    var raw = ($('imgUrl').value||'').trim(), n = $('imgNote');
+    if(!raw){ n.hidden = true; return; }
+    n.hidden = false;
+    if(!/^https:\/\//i.test(raw)){
+      n.innerHTML = '<b>Needs to be an https:// address.</b> Email clients will not load a file from your computer — upload it to the website first, then paste the link.';
+      return;
+    }
+    if(!imgUrl()){
+      n.innerHTML = '<b>That does not end in an image file.</b> It needs to finish .jpg, .png, .webp or .gif — a page link will show as a broken image.';
+      return;
+    }
+    if(!($('imgAlt').value||'').trim()){
+      n.innerHTML = '<b>Add a description.</b> Many people have images switched off, and a screen reader has nothing else to go on.';
+      return;
+    }
+    n.innerHTML = 'Looks right. Remember most clients hide images until the reader allows them, so keep anything important in the words.';
+  }
+  $('imgUrl').addEventListener('input', function(){ checkImg(); renderPreview(); renderReady(); });
+  $('imgAlt').addEventListener('input', function(){ checkImg(); renderPreview(); renderReady(); });
+
   function renderPreview(){
     var who = $('prevWho').value;
     var c = who ? contacts.filter(function(x){ return x.email===who; })[0] : null;
     var body = merge($('body').value, c);
     var paras = body.split(/\n{2,}/).filter(function(p){ return p.trim(); })
       .map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('');
+    var iu = imgUrl(), ia = ($('imgAlt').value||'').trim();
+    var imgHtml = iu
+      ? '<img src="'+esc(iu)+'" alt="'+esc(ia)+'" style="max-width:100%;height:auto;border-radius:6px;margin:0 0 16px;display:block">'
+      : '';
     $('prev').innerHTML =
       '<div class="banner"><b>'+esc($('subj').value || '(no subject)')+'</b><br>'
       + 'To: ' + esc(c ? (c.name ? c.name+' <'+c.email+'>' : c.email) : 'a sample recipient') + '</div>'
+      + imgHtml
       + (paras || '<p style="color:#999">Nothing written yet.</p>')
       + '<hr><div class="ft">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR '
       + '&middot; <span style="text-decoration:underline">Unsubscribe</span></div>';
@@ -1152,7 +1215,9 @@ window.__mktStart = function(){
 
   function saveCampaign(recipients){
     var id = newId();
-    post({ action:'mktSave', campaign:{ id:id, subject:$('subj').value, body:$('body').value, recipients:recipients } });
+    post({ action:'mktSave', campaign:{ id:id, subject:$('subj').value, body:$('body').value,
+                                        image:imgUrl(), imageAlt:($('imgAlt').value||'').trim(),
+                                        recipients:recipients } });
     return id;
   }
 

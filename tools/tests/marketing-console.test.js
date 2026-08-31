@@ -432,6 +432,60 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(items()[3] === false, 'the test-sent item stays unticked until a test actually goes');
   }
 
+  /* ---------- referral template + photos ---------- */
+  console.log('referral template and photos');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /compose/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    w.confirm = () => true;
+
+    const tpl = d.getElementById('tpl');
+    ok([...tpl.options].some(o => o.value === 'referral'), 'a referral template is offered');
+    tpl.value = 'referral'; tpl.dispatchEvent(new w.Event('change'));
+    await wait(50);
+    const body = d.getElementById('body').value;
+    ok(/£50/.test(body) && /£75/.test(body), 'it states both reward tiers');
+    ok(/under £1,000/.test(body) && /£1,000 and above/.test(body), 'and the threshold that separates them');
+    ok(/bank transfer/.test(body) && /completed/.test(body), 'and that it is paid after completion');
+    ok(/trackers and immobilisers only/i.test(body), 'and the limit on what qualifies');
+    ok(/no limit on how many/i.test(body), 'and that referrals are uncapped');
+    ok(/\{\{first\}\}/.test(body), 'personalised');
+
+    // photo validation
+    const url = d.getElementById('imgUrl'), alt = d.getElementById('imgAlt'), note = d.getElementById('imgNote');
+    url.value = '/Users/geoff/photo.jpg'; url.dispatchEvent(new w.Event('input')); await wait(40);
+    ok(/https:\/\//.test(note.textContent) && !note.hidden, 'a local file path is rejected with an explanation');
+
+    url.value = 'https://acrautomobile.com/gallery'; url.dispatchEvent(new w.Event('input')); await wait(40);
+    ok(/image file/i.test(note.textContent), 'a page link is rejected — it would show as a broken image');
+
+    url.value = 'https://acrautomobile.com/assets/og-image.jpg'; url.dispatchEvent(new w.Event('input')); await wait(40);
+    ok(/description/i.test(note.textContent), 'a valid URL with no description asks for one');
+
+    alt.value = 'Meta Trak S5 fitted to a Range Rover'; alt.dispatchEvent(new w.Event('input')); await wait(50);
+    ok(/hide images/i.test(note.textContent), 'once valid it warns that clients hide images by default');
+    ok(!!d.querySelector('#prev img'), 'the photo appears in the preview');
+    ok(d.querySelector('#prev img').getAttribute('alt') === 'Meta Trak S5 fitted to a Range Rover',
+       'with the description as alt text');
+
+    // changing the photo must invalidate the "tested" tick
+    const readyAt = () => [...d.querySelectorAll('#ready li')].map(li => li.className.indexOf('done') > -1)[3];
+    d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    calls.post.length = 0;
+    d.getElementById('testBtn').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    for (let i = 0; i < 80 && !readyAt(); i++) await wait(60);
+    ok(readyAt() === true, 'sending a test ticks the last item');
+    const saved = calls.post.filter(p => p.action === 'mktSave').pop();
+    ok(saved && saved.campaign.image === 'https://acrautomobile.com/assets/og-image.jpg',
+       'the photo travels with the campaign so the test shows what would really go out');
+    ok(saved && saved.campaign.imageAlt === 'Meta Trak S5 fitted to a Range Rover', 'and its description');
+
+    alt.value = 'A different description'; alt.dispatchEvent(new w.Event('input')); await wait(50);
+    ok(readyAt() === false, 'changing the photo un-ticks "test sent" — the test no longer covers what would go out');
+  }
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   dom.window.close();
   process.exit(fail ? 1 : 0);

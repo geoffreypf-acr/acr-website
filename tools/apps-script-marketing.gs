@@ -238,7 +238,7 @@ function mktUnsubPage_(e) {
 /* --------------------------------------------------------------- campaigns */
 
 function mktSaveCampaign_(data) {
-  var sh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'recipients', 'status', 'sent', 'failed']);
+  var sh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'image', 'imageAlt', 'recipients', 'status', 'sent', 'failed']);
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   var c = data.campaign || {};
   var list = (c.recipients || []).map(mktValidEmail_).filter(Boolean);
@@ -251,13 +251,18 @@ function mktSaveCampaign_(data) {
   var id = String(c.id || '').trim() || ('C' + Date.now());
   if (mktCampaign_(id)) return { ok: true, id: id, total: list.length, already: true };
   var rec = { id: id, createdAt: new Date().toISOString(), subject: String(c.subject),
-              body: String(c.body), recipients: list.join(','), status: 'ready', sent: 0, failed: 0 };
+              body: String(c.body),
+              /* https only: a data: URI is stripped by Gmail and an http image
+                 triggers a mixed-content warning in some clients */
+              image: /^https:\/\//i.test(String(c.image || '')) ? String(c.image) : '',
+              imageAlt: String(c.imageAlt || ''),
+              recipients: list.join(','), status: 'ready', sent: 0, failed: 0 };
   sh.appendRow(head.map(function (h) { return rec[h] != null ? rec[h] : ''; }));
   return { ok: true, id: id, total: list.length };
 }
 
 function mktCampaign_(id) {
-  var sh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'recipients', 'status', 'sent', 'failed']);
+  var sh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'image', 'imageAlt', 'recipients', 'status', 'sent', 'failed']);
   var rows = mktRows_(sh);
   for (var i = 0; i < rows.length; i++) if (String(rows[i].id) === String(id)) { rows[i].__row = i + 2; return rows[i]; }
   return null;
@@ -306,14 +311,23 @@ function mktSendBatch_(e) {
     var body = String(camp.body).replace(/\{\{\s*first\s*\}\}/gi, first)
                                 .replace(/\{\{\s*name\s*\}\}/gi, (c && c.name) || first);
     var unsub = ScriptApp.getService().getUrl() + '?action=unsub&e=' + encodeURIComponent(em) + '&t=' + mktToken_(em);
+    var pic = String(camp.image || '');
+    var picAlt = String(camp.imageAlt || '');
+    var picHtml = pic
+      ? '<img src="' + pic + '" alt="' + picAlt.replace(/"/g, '&quot;')
+        + '" width="620" style="max-width:100%;height:auto;border-radius:6px;margin:0 0 18px;display:block">'
+      : '';
     var html = '<div style="font:16px/1.65 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:620px">'
+             + picHtml
              + body.split(/\n{2,}/).map(function (p) {
                  return '<p style="margin:0 0 16px">' + p.replace(/\n/g, '<br>') + '</p>';
                }).join('')
              + '<hr style="border:none;border-top:1px solid #e3e3e3;margin:26px 0 14px">'
              + '<p style="font-size:12.5px;color:#666;margin:0">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR'
              + ' &middot; <a href="' + unsub + '" style="color:#666">Unsubscribe</a></p></div>';
-    var plain = body + '\n\n---\nACR Automobile, Addison Avenue, Holland Park, London W11 4QR\nUnsubscribe: ' + unsub;
+    var plain = body
+              + (pic ? '\n\n[Photo' + (picAlt ? ': ' + picAlt : '') + ']\n' + pic : '')
+              + '\n\n---\nACR Automobile, Addison Avenue, Holland Park, London W11 4QR\nUnsubscribe: ' + unsub;
     try {
       var opts = { to: em, subject: String(camp.subject), body: plain, htmlBody: html,
                    name: MKT_NAME, replyTo: MKT_FROM };
@@ -334,7 +348,7 @@ function mktSendBatch_(e) {
 
   var doneNow = mktLogged_(id);
   var remaining = all.filter(function (em) { return !doneNow[mktNorm_(em)]; }).length;
-  var campSh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'recipients', 'status', 'sent', 'failed']);
+  var campSh = mktSheet_(MKT_CAMP, ['id', 'createdAt', 'subject', 'body', 'image', 'imageAlt', 'recipients', 'status', 'sent', 'failed']);
   var cHead = campSh.getRange(1, 1, 1, campSh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   campSh.getRange(camp.__row, cHead.indexOf('sent') + 1).setValue(Number(camp.sent || 0) + sent);
   campSh.getRange(camp.__row, cHead.indexOf('failed') + 1).setValue(Number(camp.failed || 0) + failed);
@@ -360,6 +374,10 @@ function mktTest_(e) {
   var html = '<div style="font:16px/1.65 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:620px">'
            + '<p style="background:#fff4d6;padding:10px 12px;border-radius:6px;margin:0 0 18px;font-size:13px">'
            + 'TEST SEND - merge fields show sample values.</p>'
+           + (String(camp.image || '')
+               ? '<img src="' + String(camp.image) + '" alt="' + String(camp.imageAlt || '').replace(/"/g, '&quot;')
+                 + '" width="620" style="max-width:100%;height:auto;border-radius:6px;margin:0 0 18px;display:block">'
+               : '')
            + body.split(/\n{2,}/).map(function (p) { return '<p style="margin:0 0 16px">' + p.replace(/\n/g, '<br>') + '</p>'; }).join('')
            + '<hr style="border:none;border-top:1px solid #e3e3e3;margin:26px 0 14px">'
            + '<p style="font-size:12.5px;color:#666;margin:0">ACR Automobile, Addison Avenue, Holland Park, London W11 4QR'
