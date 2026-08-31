@@ -590,13 +590,19 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     tpl.value = 'review'; tpl.dispatchEvent(new w.Event('change'));
     await wait(80);
     const body = d.getElementById('body').value;
-    ok(/g\.page\/r\//.test(body), 'it links the Google review page');
-    ok(/trustpilot/i.test(body), 'and Trustpilot');
-    ok(/one is plenty/i.test(body), 'and does not ask for both');
-    ok(/reply to this email instead/i.test(body),
-       'and offers to fix a problem rather than fishing for a bad review in public');
-    ok(!/discount|voucher|free|reward/i.test(body),
-       'it offers NO incentive - paying for reviews breaches Google\'s policies');
+    /* wording supplied by ACR - checked verbatim rather than paraphrased */
+    ok(/ACR Automobile would love your feedback\. Post a review to our profile\./.test(body),
+       'the opening line is exactly as supplied');
+    ok(/Google\nhttps:\/\/g\.page\/r\/CZPh91CpyERvEBE\/review/.test(body),
+       'the Google link is labelled and correct');
+    ok(/Trustpilot\nhttps:\/\/uk\.trustpilot\.com\/review\/acrautomobile\.com/.test(body),
+       'the Trustpilot link is labelled and correct');
+    ok(/Please let us know when you\u2019ve done it\. This would help our business a lot\./.test(body),
+       'the follow-up line is intact, with a typographic apostrophe');
+    ok(/We would like to thank you and appreciate you for using our services\./.test(body),
+       'and the closing line');
+    ok(!/discount|voucher|free|reward|£/i.test(body),
+       'it offers NO incentive - paying for reviews breaches Google\'s policies and can get existing reviews removed');
     ok(d.getElementById('segSel').value === 'cust' && /Completed/.test(
          (d.querySelector('#stChips .chip2.on') || {}).textContent || ''),
        'choosing it points the filters at Completed, so a live enquiry is not asked to review work that has not happened');
@@ -611,6 +617,84 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(!!d.getElementById('ofImgUp') && !!d.getElementById('ofImgFile'), 'the Offer builder has one too');
     ok(d.getElementById('imgFile').getAttribute('accept').indexOf('image/') === 0,
        'the picker only offers images');
+  }
+
+  /* ---------- changing status from here ---------- */
+  console.log('status changes');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /contacts/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    // clear the filters the review template set
+    d.querySelector('#stChips [data-st=""]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    d.querySelector('#segChips [data-seg="all"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+
+    const rowFor = em => [...d.querySelectorAll('#tbody tr')].find(r => new RegExp(em).test(r.textContent));
+    const jo = rowFor('jo@example');
+    const sel = jo.querySelector('.stsel');
+    ok(!!sel, 'each row has a status select');
+    ok(sel.value === 'Quoted', 'it shows the current status (got ' + sel.value + ')');
+    ok([...sel.options].map(o => o.textContent).join('|')
+        === 'New|Call back|Follow Up 1|Follow Up 2|Quoted|Booked|Invoice sent|Completed|On Hold|Not Serious|Lost|Archive',
+       'with the CRM stages in the CRM order');
+
+    // an imported contact has no enquiry row to write to
+    const imp = rowFor('imported@example');
+    ok(imp && !imp.querySelector('.stsel'),
+       'an imported contact has no status select - there is no enquiry to attach one to');
+
+    // changing it writes through the CRM's own action
+    calls.post.length = 0;
+    sel.value = 'Completed';
+    sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+    await wait(80);
+    const upd = calls.post.find(p => p.action === 'updateEnquiry');
+    ok(!!upd, 'it posts updateEnquiry, the same action the CRM board uses');
+    ok(upd && upd.key === '2026-08-18T10:00:00.000Z',
+       'keyed on the most recent enquiry row (got ' + (upd && upd.key) + ')');
+    ok(upd && upd.fields && upd.fields.status === 'Completed',
+       'with the new status (got ' + (upd && JSON.stringify(upd.fields)) + ')');
+
+    // and the screen updates without waiting for a round trip
+    await wait(60);
+    ok(/Completed/.test(rowFor('jo@example').querySelector('.stsel').value),
+       'the row reflects it immediately');
+    const stChip = [...d.querySelectorAll('#stChips .chip2')].find(c => /Quoted/.test(c.textContent));
+    ok(!stChip || !/Quoted <b>1/.test(stChip.innerHTML),
+       'the status counts recount rather than going stale');
+
+    // clicking the select must not toggle the row selection
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    rowFor('jo@example').querySelector('.stsel').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    ok(/0 selected/.test(d.getElementById('selCount').textContent),
+       'clicking the status select does not also select the row');
+
+    /* bulk */
+    const bulkSel = d.getElementById('bulkStatus'), bulkBtn = d.getElementById('bulkApply');
+    ok(!!bulkSel && !!bulkBtn, 'there is a bulk status control');
+    ok(bulkBtn.disabled, 'disabled with nothing selected');
+    d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(bulkBtn.disabled, 'still disabled until a status is chosen');
+    bulkSel.value = 'Lost';
+    bulkSel.dispatchEvent(new w.Event('change'));
+    await wait(40);
+    ok(!bulkBtn.disabled, 'enabled once both are set');
+    ok(/Set status — \d+/.test(bulkBtn.textContent), 'and it says how many (got ' + bulkBtn.textContent + ')');
+
+    calls.post.length = 0;
+    w.confirm = () => true;
+    bulkBtn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(120);
+    const updates = calls.post.filter(p => p.action === 'updateEnquiry');
+    /* 7 contacts, minus the unsubscribed one (never selectable), minus the
+       imported one (no enquiry row to write to) = 5 */
+    ok(updates.length === 5,
+       'one write per selected contact WITH an enquiry row; the unsubscribed and imported ones are skipped (got ' + updates.length + ')');
+    ok(updates.every(u => u.fields.status === 'Lost'), 'all set to the chosen status');
+    ok(new Set(updates.map(u => u.key)).size === updates.length, 'no row written twice');
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

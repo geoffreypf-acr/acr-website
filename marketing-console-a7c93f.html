@@ -73,6 +73,11 @@
   .empty2 { color: var(--text-muted); font-size: 13px; padding: 14px 2px; }
   /* Segment chips. A dropdown hid the counts behind a click; chips show all of
      them at once, which is the number you actually decide on. */
+  .stsel { height: 28px; padding: 0 6px; font-size: 12px; background: var(--surface-inset);
+           border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-primary);
+           font-family: var(--font-body); max-width: 132px; }
+  .stsel:hover { border-color: var(--border-strong); }
+  .bulk-st { display: inline-flex; gap: 7px; align-items: center; margin-left: auto; }
   .upl { display: flex; gap: 8px; align-items: stretch; }
   .upl input.f { flex: 1 1 auto; min-width: 0; }
   .upl .btn2 { flex: 0 0 auto; }
@@ -188,6 +193,10 @@
       <button class="btn2" id="selAll">Select all shown</button>
       <button class="btn2" id="selNone">Clear</button>
       <span id="selCount">0 selected</span>
+      <span class="bulk-st">
+        <select class="f" id="bulkStatus" style="height:34px;padding:0 10px;font-size:13px;width:auto"></select>
+        <button class="btn2" id="bulkApply" disabled>Set status</button>
+      </span>
     </div>
     <div class="tw">
       <table class="lst" id="tbl"><thead><tr>
@@ -442,6 +451,11 @@ window.__mktStart = function(){
 
   /* Two extra filters, ANDed with the segment above. Interest is derived from
      what the enquiry was actually about; status is the CRM pipeline stage. */
+  /* The CRM's stages, in its order. Kept identical so a status set here means
+     the same thing as one set on the board. */
+  var STAGES = ['New','Call back','Follow Up 1','Follow Up 2','Quoted','Booked',
+                'Invoice sent','Completed','On Hold','Not Serious','Lost','Archive'];
+
   var INTERESTS = [
     { key:'',    label:'Any' },
     { key:'sec', label:'Vehicle security', re:/tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security|package/i },
@@ -479,18 +493,13 @@ window.__mktStart = function(){
              +'Explain the change here — what it is, whether it affects them, and what they need to do '
              +'(ideally nothing).\n\nAny questions, reply to this email and it comes straight to us.\n\n'
              +'Kind regards,\nACR Automobile' },
-    review: { s:'Would you mind leaving us a review?',
+    review: { s:'ACR Automobile would love your feedback',
             b:'Hi {{first}},\n\n'
-             +'Thank you for having us out — I hope the car is behaving itself.\n\n'
-             +'If you have a minute, a short review would genuinely help us. Most of our work comes '
-             +'by recommendation rather than advertising, so what previous customers say is the main '
-             +'reason the next person gets in touch.\n\n'
-             +'Google: https://g.page/r/CZPh91CpyERvEBE/review\n'
-             +'Trustpilot: https://uk.trustpilot.com/review/acrautomobile.com\n\n'
-             +'Either is fine, and one is plenty — no need to do both.\n\n'
-             +'If anything is not quite right, reply to this email instead and we will come back out. '
-             +'I would much rather fix it than read about it.\n\n'
-             +'Kind regards,\nACR Automobile' },
+             +'ACR Automobile would love your feedback. Post a review to our profile.\n\n'
+             +'Google\nhttps://g.page/r/CZPh91CpyERvEBE/review\n\n'
+             +'Trustpilot\nhttps://uk.trustpilot.com/review/acrautomobile.com\n\n'
+             +'Please let us know when you\u2019ve done it. This would help our business a lot.\n\n'
+             +'We would like to thank you and appreciate you for using our services.' },
     referral: { s:'£50–£75 when you recommend us',
             b:'Hi {{first}},\n\n'
              +'Most of our work comes by recommendation rather than advertising, so we pay for it.\n\n'
@@ -723,12 +732,26 @@ window.__mktStart = function(){
       var tags = (c.customer?'<span class="tag cust">customer</span>':'')
                + (c.imported && !c.enquiries?'<span class="tag imp">imported</span>':'')
                + (c.unsubscribed?'<span class="tag unsub">unsubscribed</span>':'');
+      /* The status select writes to the person's most recent enquiry row, which
+         is the only row a status can sensibly mean. Imported contacts have no
+         enquiry row at all, so there is nothing to write to. */
+      var canSet = !!c.lastEnquiry;
+      var statusCell = canSet
+        ? '<select class="stsel" data-st-key="'+esc(c.lastEnquiry)+'" data-st-em="'+esc(c.email)+'">'
+          + STAGES.map(function(v){
+              return '<option'+(v===(c.status||'').trim()?' selected':'')+'>'+esc(v)+'</option>';
+            }).join('')
+          + (STAGES.indexOf((c.status||'').trim())<0 && (c.status||'').trim()
+              ? '<option selected>'+esc(c.status)+'</option>' : '')
+          + '</select>'
+        : '<span title="Imported by hand, so there is no enquiry to attach a status to" '
+          + 'style="color:var(--text-muted)">&mdash;</span>';
       return '<tr class="'+(c.unsubscribed?'off':'')+'">'
         + '<td>'+(c.unsubscribed?'':'<input type="checkbox" data-k="'+esc(k)+'"'+(picked[k]?' checked':'')+'>')+'</td>'
         + '<td>'+esc(c.name||'—')+'<div style="margin-top:3px">'+tags+'</div></td>'
         + '<td class="em">'+esc(c.email)+'</td>'
         + '<td>'+esc(c.lastEnquiry ? String(c.lastEnquiry).slice(0,10) : '—')+'</td>'
-        + '<td>'+esc(c.status||'—')+'</td>'
+        + '<td>'+statusCell+'</td>'
         + '<td>'+esc(c.foundVia||'—')+'</td>'
         + '<td>'+(c.unsubscribed
             ? '<button class="btn2" data-resub="'+esc(c.email)+'" style="height:28px;padding:0 9px;font-size:12px">Re-subscribe</button>'
@@ -765,12 +788,43 @@ window.__mktStart = function(){
     $('tbody').querySelectorAll('[data-resub]').forEach(function(b){
       b.addEventListener('click', function(){ setUnsub(b.getAttribute('data-resub'), false); });
     });
+    $('tbody').querySelectorAll('.stsel').forEach(function(sel){
+      sel.addEventListener('change', function(){
+        setStatus([{ key: sel.getAttribute('data-st-key'), email: sel.getAttribute('data-st-em') }], sel.value);
+      });
+      /* the row click handler toggles selection - a select must not do that too */
+      sel.addEventListener('click', function(ev){ ev.stopPropagation(); });
+    });
     renderSelCount();
+  }
+
+  /* Writes through the CRM's own updateEnquiry action, so a status set here is
+     indistinguishable from one set on the board. The POST response is not
+     readable, so the change is applied locally and the list re-read shortly
+     after - the same approach the CRM takes. */
+  function setStatus(items, value){
+    if(!items.length || !value) return;
+    items.forEach(function(it){
+      post({ action:'updateEnquiry', key: it.key, fields: { status: value } });
+      contacts.forEach(function(c){
+        if(c.email.toLowerCase() === String(it.email).toLowerCase()){
+          c.status = value;
+          c.customer = /^(completed|invoice sent|booked)$/i.test(value);
+        }
+      });
+    });
+    try { localStorage.removeItem(CACHE_KEY); } catch(e){}
+    logLine('Status set to "' + value + '" for ' + items.length + ' '
+            + (items.length===1?'contact':'contacts') + '.');
+    renderTiles(); renderSegs(); renderFilters(); renderList(); renderSendWho();
+    /* confirm against the sheet rather than trusting the optimistic update */
+    setTimeout(function(){ load(true); }, 3000);
   }
 
   function renderSelCount(){
     var n = pickedList().length;
     $('selCount').textContent = n + ' selected';
+    if(window.__syncBulk) window.__syncBulk();
   }
   var testedFor = '';        // subject+body the last test was sent for
 
@@ -1537,6 +1591,33 @@ window.__mktStart = function(){
     }
     setTimeout(batch, 2400);
   });
+
+  (function bulkStatus(){
+    var sel=$('bulkStatus'), btn=$('bulkApply');
+    if(!sel||!btn) return;
+    sel.innerHTML = '<option value="">Set status to&hellip;</option>'
+      + STAGES.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
+    function sync(){
+      var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
+      btn.disabled = !sel.value || !n;
+      btn.textContent = n ? ('Set status \u2014 ' + n) : 'Set status';
+    }
+    sel.addEventListener('change', sync);
+    btn.addEventListener('click', function(){
+      var items = pickedList().filter(function(c){ return c.lastEnquiry; })
+                    .map(function(c){ return { key:c.lastEnquiry, email:c.email }; });
+      var skipped = pickedList().length - items.length;
+      if(!items.length || !sel.value) return;
+      if(!confirm('Set ' + items.length + ' ' + (items.length===1?'contact':'contacts')
+                + ' to "' + sel.value + '"?'
+                + (skipped ? '\n\n' + skipped + ' imported contact'+(skipped===1?'':'s')
+                    + ' will be skipped \u2014 they have no enquiry to attach a status to.' : ''))) return;
+      setStatus(items, sel.value);
+      sel.value = ''; sync();
+    });
+    window.__syncBulk = sync;
+    sync();
+  })();
 
   $('selAll').addEventListener('click', function(){
     shown().forEach(function(c){ if(!c.unsubscribed) picked[c.email.toLowerCase()]=1; });
