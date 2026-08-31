@@ -26,6 +26,10 @@ const ROWS = [
     service: 'Meta Trak S7', make: 'Mercedes', model: 'G-Class', foundVia: 'Gemini', source: 'index.html' },
   { timestamp: '2026-08-25T10:00:00.000Z', name: 'Ellis Grant',  email: 'f@x.com', status: 'New',
     service: 'Tracker', make: 'Ferrari', model: 'Roma', foundVia: 'Claude', source: 'tide' },
+  { timestamp: '2026-08-26T10:00:00.000Z', name: 'Web Walkin', email: 'j@x.com', status: 'New',
+    service: 'Tracker', foundVia: 'Website', source: 'contact.html' },
+  { timestamp: '2026-08-27T10:00:00.000Z', name: 'Odd Route',  email: 'k@x.com', status: 'New',
+    service: 'Tracker', foundVia: 'Other', source: 'phone' },
   // two rows written before the field existed - must be reported, not guessed
   { timestamp: '2026-07-01T10:00:00.000Z', name: 'Old Lead One', email: 'g@x.com', status: 'New', service: 'Tracker', source: 'phone' },
   { timestamp: '2026-07-02T10:00:00.000Z', name: 'Old Lead Two', email: 'h@x.com', status: 'Lost',  service: 'Tracker', source: 'gmail' }
@@ -78,7 +82,8 @@ const writes = w.__writes;
     const rows = [...chart.querySelectorAll('.row')];
     const google = rows.find(r => /Google/.test(r.textContent));
     ok(google && /2/.test(google.querySelector('.num').textContent), 'Google counted twice (got ' + (google && google.querySelector('.num').textContent) + ')');
-    ok(rows.length === 5, 'five distinct sources charted, got ' + rows.length);
+    ok(/Website/.test(txt) && /Other/.test(txt), 'Website and Other appear in the source group');
+    ok(rows.length === 7, 'seven distinct sources charted, got ' + rows.length);
     ok(rows[0] === google, 'the chart is sorted, biggest first');
     ok(/2 earlier records predate the question/.test(txt),
        'says how many rows predate the field (got: ' + (txt.match(/\d+ earlier record[^.]*\./) || ['none']) [0] + ')');
@@ -103,8 +108,8 @@ const writes = w.__writes;
     const sel = d.getElementById('dFound');
     ok(!!sel, 'the drawer has a "Where they found us" field');
     ok(sel && sel.value === 'ChatGPT', 'it loads the record\'s value (got ' + (sel && sel.value) + ')');
-    ok(sel && [...sel.options].map(o => o.value).join(',') === ',Google,ChatGPT,Claude,Gemini,Referral,Other',
-       'options are blank + the five + Other (got ' + (sel && [...sel.options].map(o => o.value).join(',')) + ')');
+    ok(sel && [...sel.options].map(o => o.value).join(',') === ',Google,ChatGPT,Claude,Gemini,Referral,Website,Other',
+       'drawer offers blank + all seven (got ' + (sel && [...sel.options].map(o => o.value).join(',')) + ')');
 
     writes.length = 0;
     sel.value = 'Referral';
@@ -141,8 +146,8 @@ const writes = w.__writes;
       /* the two groups must not be read as one total */
       const fSum = [...found.querySelectorAll('.row .num')].reduce((a, e) => a + (+e.textContent || 0), 0);
       const cSum = [...chan.querySelectorAll('.row .num')].reduce((a, e) => a + (+e.textContent || 0), 0);
-      ok(fSum === 6 && cSum === 8,
-         'the groups count independently: 6 with a source, 8 with a channel (got ' + fSum + '/' + cSum + ')');
+      ok(fSum === 8 && cSum === 10,
+         'the groups count independently: 8 with a source, 10 with a channel (got ' + fSum + '/' + cSum + ')');
       ok([...d.querySelectorAll('.dcard h3')].filter(h => /how they reached us/i.test(h.textContent)).length === 0,
          'the old standalone "How they reached us" card is gone');
     }

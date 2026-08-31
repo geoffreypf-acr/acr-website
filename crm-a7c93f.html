@@ -522,7 +522,7 @@ window.__crmStart = function(){
     var sel=$('dFound'); if(!sel) return;
     var blank=document.createElement('option'); blank.value=''; blank.textContent='Not recorded';
     sel.appendChild(blank);
-    ['Google','ChatGPT','Claude','Gemini','Referral','Other'].forEach(function(name){
+    ['Google','ChatGPT','Claude','Gemini','Referral','Website','Other'].forEach(function(name){
       var o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o);
     });
   })();
@@ -577,7 +577,7 @@ window.__crmStart = function(){
      answer. Rows created before that field existed have nothing to report, so
      they are counted separately rather than guessed at: an invented source is
      worse than an honest gap. */
-  var FOUND = ['Google','ChatGPT','Claude','Gemini','Referral'];
+  var FOUND = ['Google','ChatGPT','Claude','Gemini','Referral','Website','Other'];
   function foundOf(e){
     var v = (e.foundVia || '').toString().trim();
     if(!v) return '';
