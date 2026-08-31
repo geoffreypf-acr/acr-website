@@ -24,6 +24,16 @@ var MKT_FROM    = 'info@acrautomobile.com';
 var MKT_NAME    = 'ACR Automobile';
 var MKT_SECRET  = 'acr-unsub-4f19b2';   // change this and every old unsubscribe link stops working
 var MKT_BATCH   = 25;                   // addresses per request
+var MKT_PHOTOS  = 'ACR marketing images';   // Drive folder for uploaded photos
+
+/* Whether info@acrautomobile.com can be used as the From address. Gmail only
+   allows it if it is a verified "send mail as" alias on this account; otherwise
+   MailApp silently sends as the account owner instead, which is not something
+   you want to discover from a customer. Surfaced in the console so it is
+   visible rather than assumed. */
+function mktFromOk_() {
+  try { return GmailApp.getAliases().indexOf(MKT_FROM) !== -1; } catch (e) { return false; }
+}
 
 /* ------------------------------------------------------------------ cache */
 
@@ -390,6 +400,51 @@ function mktTest_(e) {
   }
 }
 
+/* ------------------------------------------------------------------ photos */
+
+/* Saves an uploaded photo to Drive and records its URL against the id the
+   console generated, which is how the console learns the URL: it cannot read a
+   POST response, so it polls mktPhoto instead.
+
+   Drive is a convenience, not the best host for email. Some clients are wary of
+   googleusercontent image URLs, so a photo already on acrautomobile.com is more
+   reliable - the console says so. */
+function mktUpload_(data) {
+  var sh = mktSheet_('Photos', ['id', 'url', 'name', 'at']);
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  try {
+    var id = String(data.id || '').trim();
+    if (!id) return { ok: false, error: 'no id' };
+    var name = String(data.name || 'photo.jpg').replace(/[^\w.\- ]/g, '');
+    var mime = String(data.mime || 'image/jpeg');
+    if (!/^image\/(jpe?g|png|webp|gif)$/i.test(mime)) return { ok: false, error: 'not an image' };
+
+    var it = DriveApp.getFoldersByName(MKT_PHOTOS);
+    var folder = it.hasNext() ? it.next() : DriveApp.createFolder(MKT_PHOTOS);
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.dataB64 || ''), mime, name);
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    /* lh3 serves the bytes directly; the older uc?export=view form now often
+       returns an interstitial instead of an image */
+    var url = 'https://lh3.googleusercontent.com/d/' + file.getId();
+    var rec = { id: id, url: url, name: name, at: new Date().toISOString() };
+    sh.appendRow(head.map(function (h) { return rec[h] != null ? rec[h] : ''; }));
+    return { ok: true, id: id, url: url };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function mktPhoto_(e) {
+  var id = String(e.parameter.id || '').trim();
+  if (!id) return mktJson_({ ok: false, error: 'no id' });
+  var rows = mktRows_(mktSheet_('Photos', ['id', 'url', 'name', 'at']));
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (String(rows[i].id) === id) return mktJson_({ ok: true, url: String(rows[i].url) });
+  }
+  return mktJson_({ ok: false, pending: true });
+}
+
 /* ---------------------------------------------------------------- dispatch */
 
 /* Readable operations, called with ?action=... from the console. */
@@ -406,7 +461,8 @@ function mktGet_(e) {
       }
     }
     var payload = JSON.stringify({ ok: true, contacts: mktContacts_(),
-                                   quotaLeft: MailApp.getRemainingDailyQuota() });
+                                   quotaLeft: MailApp.getRemainingDailyQuota(),
+                                   from: MKT_FROM, fromOk: mktFromOk_() });
     /* A payload over 100KB will not fit in the cache; store what fits and
        simply recompute next time rather than failing the request. */
     if (cache) { try { cache.put(MKT_CACHE_KEY, payload, MKT_CACHE_TTL); } catch (e) {} }
@@ -414,6 +470,7 @@ function mktGet_(e) {
   }
   if (a === 'mktSend')  return mktSendBatch_(e);
   if (a === 'mktTest')  return mktTest_(e);
+  if (a === 'mktPhoto') return mktPhoto_(e);
   return null;
 }
 
@@ -421,6 +478,7 @@ function mktGet_(e) {
 function mktPost_(data) {
   if (data.action === 'mktImport')   return mktJson_(mktImport_(data));
   if (data.action === 'mktSave')     return mktJson_(mktSaveCampaign_(data));
+  if (data.action === 'mktUpload')   return mktJson_(mktUpload_(data));
   if (data.action === 'mktUnsub')    { mktSetUnsub_(data.email, data.on !== false); return mktJson_({ ok: true }); }
   return null;
 }

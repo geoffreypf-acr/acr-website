@@ -24,7 +24,13 @@ const CONTACTS = [
     imported: false, unsubscribed: true, mailable: false, consent: '', tags: '' },
   { email: 'imported@example.com', name: 'Pasted Person', first: 'Pasted', status: '', service: '',
     foundVia: '', lastEnquiry: '', enquiries: 0, customer: false,
-    imported: true, unsubscribed: false, mailable: true, consent: 'Existing customer', tags: 'dealer-list' }
+    imported: true, unsubscribed: false, mailable: true, consent: 'Existing customer', tags: 'dealer-list' },
+  { email: 'dashcam@example.com', name: 'Dee Cam', first: 'Dee', status: 'Completed', service: 'Dash camera installation',
+    foundVia: 'Google', lastEnquiry: '2026-08-16T10:00:00.000Z', enquiries: 1, customer: true,
+    imported: false, unsubscribed: false, mailable: true },
+  { email: 'carplay@example.com', name: 'Cam Play', first: 'Cam', status: 'Completed', service: 'Apple CarPlay retrofit',
+    foundVia: 'ChatGPT', lastEnquiry: '2026-08-15T10:00:00.000Z', enquiries: 1, customer: true,
+    imported: false, unsubscribed: false, mailable: true }
 ];
 
 /* raw enquiry rows, as the CRM sheet returns them - the Ideas tab counts these */
@@ -58,7 +64,8 @@ const dom = new JSDOM(html, {
       calls.get.push(u);
       if (/action=mktList/.test(u)) {
         return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(
-          { ok: true, contacts: JSON.parse(JSON.stringify(CONTACTS)), quotaLeft: 1500 })) });
+          { ok: true, contacts: JSON.parse(JSON.stringify(CONTACTS)), quotaLeft: 1500,
+            from: 'info@acrautomobile.com', fromOk: true })) });
       }
       if (/action=mktTest/.test(u)) {
         return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify({ ok: true, to: 'x', quotaLeft: 1499 })) });
@@ -109,7 +116,15 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(420);                       // the tile counters animate for 260ms
   const tiles = d.getElementById('tiles').textContent;
   ok(/Unsubscribed/.test(tiles), 'an unsubscribed tile is shown');
-  ok(/5/.test(tiles), 'all five contacts counted');
+  /* read the tile's own value element - in textContent the value and the
+     subtitle run together ("Contacts76 can be emailed") */
+  const tileVal = label => {
+    const t = [...d.querySelectorAll('#tiles .tile2')].find(x => new RegExp(label, 'i').test(x.querySelector('.k').textContent));
+    return t ? t.querySelector('.v').textContent.trim() : null;
+  };
+  ok(tileVal('Contacts') === '7', 'all seven contacts counted (got ' + tileVal('Contacts') + ')');
+  ok(tileVal('Customers') === '4', 'four mailable customers (got ' + tileVal('Customers') + ')');
+  ok(tileVal('Unsubscribed') === '1', 'one unsubscribed (got ' + tileVal('Unsubscribed') + ')');
 
   /* --- unsubscribed must be unselectable, in every segment --- */
   d.getElementById('segSel').value = 'all';
@@ -123,7 +138,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(60);
   ok(!/gone@example\.com/.test(d.getElementById('selCount').textContent), 'selCount is a number, not addresses');
   const selectedAll = +d.getElementById('selCount').textContent.match(/\d+/)[0];
-  ok(selectedAll === 4, '"Select all shown" picks the 4 mailable contacts, never the opted-out one (got ' + selectedAll + ')');
+  ok(selectedAll === 6, '"Select all shown" picks the 6 mailable contacts, never the opted-out one (got ' + selectedAll + ')');
 
   /* --- the unsubscribed segment shows them, but with no checkbox --- */
   d.getElementById('segSel').value = 'unsub';
@@ -183,8 +198,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(40);
   ok(!d.getElementById('sendBtn').disabled, 'Send enables once recipients are selected');
   const n = +d.getElementById('sendBtn').textContent.match(/\d+/)[0];
-  ok(n === 2, 'the Customers segment selects 2 (Alex + Sam), excluding the opted-out customer (got ' + n + ')');
-  ok(/Send to 2 people/.test(d.getElementById('sendBtn').textContent),
+  ok(n === 4, 'the Customers segment selects the 4 mailable customers, excluding the opted-out one (got ' + n + ')');
+  ok(/Send to 4 people/.test(d.getElementById('sendBtn').textContent),
      'the button states who it is about to email (got: ' + d.getElementById('sendBtn').textContent.trim() + ')');
 
   // refuse a wrong confirmation
@@ -207,12 +222,13 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   ok(saves.length === 1, 'exactly one campaign was saved (got ' + saves.length + ')');
   ok(saves[0].campaign.id && /^C\d+/.test(saves[0].campaign.id),
      'the client supplied the campaign id, so it can send what it saved');
-  ok(saves[0].campaign.recipients.length === 2 &&
+  ok(saves[0].campaign.recipients.length === 4 &&
      saves[0].campaign.recipients.indexOf('gone@example.com') === -1,
-     'the saved recipient list excludes the opted-out address');
-  ok(sendState.sent.length === 2 && new Set(sendState.sent).size === 2,
+     'the saved recipient list excludes the opted-out address (got '
+     + JSON.stringify(saves[0].campaign.recipients) + ')');
+  ok(sendState.sent.length === 4 && new Set(sendState.sent).size === 4,
      'each address was sent exactly once across the batches (got ' + JSON.stringify(sendState.sent) + ')');
-  ok(/2\/2 done/.test(log), 'progress was reported per batch');
+  ok(/4\/4 done/.test(log), 'progress was reported per batch, in batches of 2');
 
   /* ---------- file upload: the exports people actually have ---------- */
   console.log('contact upload');
@@ -486,6 +502,115 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
     alt.value = 'A different description'; alt.dispatchEvent(new w.Event('input')); await wait(50);
     ok(readyAt() === false, 'changing the photo un-ticks "test sent" — the test no longer covers what would go out');
+  }
+
+  /* ---------- interest and status filters ---------- */
+  console.log('interest and status filters');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /contacts/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+
+    const intChips = [...d.querySelectorAll('#intChips .chip2')];
+    ok(intChips.length === 4, 'four interest chips: Any, security, CarPlay, dash camera (got ' + intChips.length + ')');
+    ok(intChips.map(c => c.textContent.replace(/\s*\d+$/, '').trim()).join('|')
+        === 'Any|Vehicle security|CarPlay & Android Auto|Dash camera',
+       'named as asked (got ' + intChips.map(c => c.textContent.trim()).join('|') + ')');
+
+    // switch to Everyone so the filter is what narrows, not the segment
+    d.querySelector('#segChips [data-seg="all"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    d.querySelector('#intChips [data-int="dc"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    let rows = [...d.querySelectorAll('#tbody tr')];
+    ok(rows.length === 2 && rows.every(r => /dashcam@|jo@example/.test(r.textContent)),
+       'the dash camera filter shows only dash camera enquiries (got ' + rows.map(r => (r.textContent.match(/\S+@\S+/) || [''])[0]).join(', ') + ')');
+
+    d.querySelector('#intChips [data-int="cp"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    rows = [...d.querySelectorAll('#tbody tr')];
+    ok(rows.length === 2 && rows.some(r => /carplay@/.test(r.textContent)),
+       'the CarPlay filter picks CarPlay enquiries (got ' + rows.length + ')');
+
+    d.querySelector('#intChips [data-int="sec"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    rows = [...d.querySelectorAll('#tbody tr')];
+    ok(rows.some(r => /alex@example/.test(r.textContent)), 'the security filter picks tracker enquiries');
+    ok(!rows.some(r => /carplay@/.test(r.textContent)), 'and excludes CarPlay ones');
+
+    // status
+    d.querySelector('#intChips [data-int=""]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    const stChips = [...d.querySelectorAll('#stChips .chip2')];
+    ok(stChips.length >= 4, 'a chip per pipeline status, plus Any (got ' + stChips.length + ')');
+    ok(stChips.some(c => /Completed/.test(c.textContent)), 'Completed is offered');
+    ok(stChips.some(c => /Quoted/.test(c.textContent)), 'Quoted is offered');
+
+    const completed = stChips.find(c => /Completed/.test(c.textContent));
+    completed.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    rows = [...d.querySelectorAll('#tbody tr')];
+    ok(rows.length === 3, 'filtering by Completed shows the three completed, mailable contacts (got ' + rows.length + ')');
+    ok(!rows.some(r => /gone@example/.test(r.textContent)),
+       'and STILL excludes the unsubscribed one, even though their status is Completed');
+
+    // the two filters combine
+    d.querySelector('#intChips [data-int="cp"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(60);
+    rows = [...d.querySelectorAll('#tbody tr')];
+    ok(rows.length === 1 && /carplay@/.test(rows[0].textContent),
+       'Completed AND CarPlay narrows to one (got ' + rows.length + ')');
+
+    // select-all must respect the filters, not the whole list
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(/1 selected/.test(d.getElementById('selCount').textContent),
+       '"Select all shown" selects only the filtered set (got ' + d.getElementById('selCount').textContent + ')');
+  }
+
+  /* ---------- the From address is stated, not assumed ---------- */
+  console.log('From address');
+  {
+    ok(/info@acrautomobile\.com/.test(d.getElementById('fromLine').textContent),
+       'the header says which address it sends as');
+    ok(/Sending as/.test(d.getElementById('fromLine').textContent),
+       'and that it is actually working when the alias is verified');
+  }
+
+  /* ---------- review template ---------- */
+  console.log('review template');
+  {
+    const tabs = [...d.getElementById('tabs').querySelectorAll('button')];
+    tabs.find(b => /compose/i.test(b.textContent)).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(40);
+    w.confirm = () => true;
+    const tpl = d.getElementById('tpl');
+    ok([...tpl.options].some(o => o.value === 'review'), 'a review template is offered');
+    tpl.value = 'review'; tpl.dispatchEvent(new w.Event('change'));
+    await wait(80);
+    const body = d.getElementById('body').value;
+    ok(/g\.page\/r\//.test(body), 'it links the Google review page');
+    ok(/trustpilot/i.test(body), 'and Trustpilot');
+    ok(/one is plenty/i.test(body), 'and does not ask for both');
+    ok(/reply to this email instead/i.test(body),
+       'and offers to fix a problem rather than fishing for a bad review in public');
+    ok(!/discount|voucher|free|reward/i.test(body),
+       'it offers NO incentive - paying for reviews breaches Google\'s policies');
+    ok(d.getElementById('segSel').value === 'cust' && /Completed/.test(
+         (d.querySelector('#stChips .chip2.on') || {}).textContent || ''),
+       'choosing it points the filters at Completed, so a live enquiry is not asked to review work that has not happened');
+    ok(/0 selected/.test(d.getElementById('selCount').textContent) || d.getElementById('sendBtn').disabled,
+       'but selects nobody automatically - the send is still a deliberate act');
+  }
+
+  /* ---------- photo upload ---------- */
+  console.log('photo upload');
+  {
+    ok(!!d.getElementById('imgUp') && !!d.getElementById('imgFile'), 'Compose has an upload button');
+    ok(!!d.getElementById('ofImgUp') && !!d.getElementById('ofImgFile'), 'the Offer builder has one too');
+    ok(d.getElementById('imgFile').getAttribute('accept').indexOf('image/') === 0,
+       'the picker only offers images');
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

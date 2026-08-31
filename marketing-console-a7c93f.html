@@ -73,6 +73,13 @@
   .empty2 { color: var(--text-muted); font-size: 13px; padding: 14px 2px; }
   /* Segment chips. A dropdown hid the counts behind a click; chips show all of
      them at once, which is the number you actually decide on. */
+  .upl { display: flex; gap: 8px; align-items: stretch; }
+  .upl input.f { flex: 1 1 auto; min-width: 0; }
+  .upl .btn2 { flex: 0 0 auto; }
+  .filt { display: flex; gap: 22px; flex-wrap: wrap; margin: 4px 0 16px; }
+  .filt > div { flex: 1 1 300px; min-width: 260px; }
+  .filt-lbl { display: block; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+  .filt .chip2 { height: 30px; padding: 0 11px; font-size: 12.5px; }
   .chips2 { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; }
   .chip2 { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 999px;
            border: 1px solid var(--border-subtle); background: transparent; color: var(--text-secondary);
@@ -143,6 +150,7 @@
     <div>
       <h1>Marketing console</h1>
       <p id="sub">Loading contacts…</p>
+      <p id="fromLine" style="font-size:12px;color:var(--text-muted);margin:3px 0 0"></p>
     </div>
     <div class="acts">
       <span data-console-nav></span>
@@ -160,6 +168,16 @@
     <p class="hint">Built from the CRM (one row per person, newest enquiry first) plus anything imported. Unsubscribes are permanent and can never be selected.</p>
     <div class="chips2" id="segChips" role="radiogroup" aria-label="Segment"></div>
     <div class="seg-note" id="segNote"></div>
+    <div class="filt">
+      <div>
+        <span class="filt-lbl">Came to us for</span>
+        <div class="chips2" id="intChips" role="radiogroup" aria-label="Interest"></div>
+      </div>
+      <div>
+        <span class="filt-lbl">Pipeline status</span>
+        <div class="chips2" id="stChips" role="radiogroup" aria-label="Status"></div>
+      </div>
+    </div>
     <div class="frow">
       <input class="f" id="q" placeholder="Search name, email, vehicle or service…   ( / to jump here )">
     </div>
@@ -254,6 +272,15 @@
       <label class="fl" for="ofTerms">Terms to state (optional, printed word for word)</label>
       <textarea class="f" id="ofTerms" style="min-height:80px" placeholder="e.g. One per vehicle. Cannot be combined with another offer."></textarea>
     </div>
+    <div>
+      <label class="fl" for="ofImgUrl">Photo for this offer (optional)</label>
+      <div class="upl">
+        <input class="f" id="ofImgUrl" placeholder="Paste a URL, or upload &rarr;">
+        <input type="file" id="ofImgFile" accept="image/jpeg,image/png,image/webp" hidden>
+        <button class="btn2" type="button" id="ofImgUp">Upload</button>
+      </div>
+      <div id="ofImgNote" class="empty2" style="padding:8px 2px 0"></div>
+    </div>
     <div class="sel-bar" style="margin-top:14px">
       <button class="btn2 primary" id="ofBuild">Write the email</button>
       <span class="hint" style="margin:0">It goes into Compose, ready to preview and test.</span>
@@ -318,6 +345,7 @@ jo@example.com, Jo Patel"></textarea>
           <option value="update">Service update</option>
           <option value="offer">Offer / new service</option>
           <option value="referral">Referral scheme</option>
+          <option value="review">Ask for a review</option>
         </select>
       </div>
       <div>
@@ -331,8 +359,12 @@ jo@example.com, Jo Patel"></textarea>
 
     <div class="frow" style="margin-top:14px">
       <div style="flex:1 1 320px">
-        <label class="fl" for="imgUrl">Photo (optional) — paste a URL</label>
-        <input class="f" id="imgUrl" placeholder="https://acrautomobile.com/assets/…jpg">
+        <label class="fl" for="imgUrl">Photo (optional)</label>
+        <div class="upl">
+          <input class="f" id="imgUrl" placeholder="Paste a URL, or upload &rarr;">
+          <input type="file" id="imgFile" accept="image/jpeg,image/png,image/webp" hidden>
+          <button class="btn2" type="button" id="imgUp">Upload</button>
+        </div>
       </div>
       <div>
         <label class="fl" for="imgAlt">Describe the photo</label>
@@ -408,6 +440,30 @@ window.__mktStart = function(){
   ];
   var seg = 'cust';
 
+  /* Two extra filters, ANDed with the segment above. Interest is derived from
+     what the enquiry was actually about; status is the CRM pipeline stage. */
+  var INTERESTS = [
+    { key:'',    label:'Any' },
+    { key:'sec', label:'Vehicle security', re:/tracker|immobilis|immobiliz|meta ?trak|deadlock|ghost|thatcham|\bs5\b|\bs7\b|security|package/i },
+    { key:'cp',  label:'CarPlay & Android Auto', re:/carplay|car ?play|android auto|pccm|idrive/i },
+    { key:'dc',  label:'Dash camera', re:/dash ?cam|thinkware/i }
+  ];
+  var interest = '';
+  function interestOf(c){
+    var hay = String(c.service || '');
+    for(var i=1;i<INTERESTS.length;i++) if(INTERESTS[i].re.test(hay)) return INTERESTS[i].key;
+    return '';
+  }
+  function matchInterest(c){ return !interest || interestOf(c) === interest; }
+
+  var status = '';
+  function statusList(){
+    var m = {};
+    contacts.forEach(function(c){ var v=(c.status||'').trim(); if(v) m[v]=(m[v]||0)+1; });
+    return Object.keys(m).sort(function(a,b){ return m[b]-m[a]; });
+  }
+  function matchStatus(c){ return !status || (c.status||'').trim() === status; }
+
   var TABS = [ {k:'list',label:'Contacts'}, {k:'ideas',label:'Ideas'}, {k:'offer',label:'Offer builder'},
                {k:'import',label:'Import'}, {k:'send',label:'Compose & send'} ];
   var tab = 'list';
@@ -422,6 +478,18 @@ window.__mktStart = function(){
             b:'Hi {{first}},\n\nA quick note about your vehicle security.\n\n'
              +'Explain the change here — what it is, whether it affects them, and what they need to do '
              +'(ideally nothing).\n\nAny questions, reply to this email and it comes straight to us.\n\n'
+             +'Kind regards,\nACR Automobile' },
+    review: { s:'Would you mind leaving us a review?',
+            b:'Hi {{first}},\n\n'
+             +'Thank you for having us out — I hope the car is behaving itself.\n\n'
+             +'If you have a minute, a short review would genuinely help us. Most of our work comes '
+             +'by recommendation rather than advertising, so what previous customers say is the main '
+             +'reason the next person gets in touch.\n\n'
+             +'Google: https://g.page/r/CZPh91CpyERvEBE/review\n'
+             +'Trustpilot: https://uk.trustpilot.com/review/acrautomobile.com\n\n'
+             +'Either is fine, and one is plenty — no need to do both.\n\n'
+             +'If anything is not quite right, reply to this email instead and we will come back out. '
+             +'I would much rather fix it than read about it.\n\n'
              +'Kind regards,\nACR Automobile' },
     referral: { s:'£50–£75 when you recommend us',
             b:'Hi {{first}},\n\n'
@@ -456,6 +524,7 @@ window.__mktStart = function(){
   function paint(d, cached){
     contacts = d.contacts || [];
     quotaLeft = (d.quotaLeft==null) ? null : d.quotaLeft;
+    if(d.from){ fromAddr = d.from; fromOk = !!d.fromOk; }
     renderAll();
     if(cached){
       var age = d.__at ? Math.round((Date.now() - d.__at)/1000) : null;
@@ -496,6 +565,17 @@ window.__mktStart = function(){
       });
   }
 
+  var fromAddr = '', fromOk = null;
+  function renderFrom(){
+    var el = $('fromLine'); if(!el) return;
+    if(fromOk === null){ el.textContent = ''; return; }
+    el.innerHTML = fromOk
+      ? 'Sending as <strong>' + esc(fromAddr) + '</strong>'
+      : '<span style="color:#e79093">Not sending as ' + esc(fromAddr) + '</span> \u2014 it is not a verified '
+        + '&ldquo;send mail as&rdquo; alias on this Google account, so email will go out from the account owner '
+        + 'with ' + esc(fromAddr) + ' as the reply-to. Add it in Gmail \u2192 Settings \u2192 Accounts.';
+  }
+
   function mailable(){ return contacts.filter(function(c){ return !c.unsubscribed; }); }
   function inSeg(c){
     var s = SEGS.filter(function(x){ return x.key===seg; })[0];
@@ -505,7 +585,7 @@ window.__mktStart = function(){
   }
   function shown(){
     var q = ($('q').value||'').trim().toLowerCase();
-    return contacts.filter(inSeg).filter(function(c){
+    return contacts.filter(inSeg).filter(matchInterest).filter(matchStatus).filter(function(c){
       if(!q) return true;
       return [c.name,c.email,c.service,c.status,c.foundVia].join(' ').toLowerCase().indexOf(q)>-1;
     });
@@ -514,9 +594,40 @@ window.__mktStart = function(){
     return contacts.filter(function(c){ return picked[c.email.toLowerCase()] && !c.unsubscribed; });
   }
 
+  function renderFilters(){
+    $('intChips').innerHTML = INTERESTS.map(function(x){
+      var n = x.key ? contacts.filter(function(c){ return !c.unsubscribed && interestOf(c)===x.key; }).length
+                    : contacts.filter(function(c){ return !c.unsubscribed; }).length;
+      return '<button type="button" role="radio" aria-checked="'+(interest===x.key)+'" class="chip2'
+           + (interest===x.key?' on':'')+'" data-int="'+x.key+'">'+esc(x.label)+' <b>'+n+'</b></button>';
+    }).join('');
+    $('intChips').querySelectorAll('[data-int]').forEach(function(b){
+      b.addEventListener('click', function(){
+        interest = b.getAttribute('data-int');
+        renderFilters(); renderList(); renderSendWho();
+      });
+    });
+
+    var sts = statusList();
+    $('stChips').innerHTML = ['<button type="button" role="radio" aria-checked="'+(!status)+'" class="chip2'
+        + (!status?' on':'')+'" data-st="">Any <b>'+contacts.filter(function(c){return !c.unsubscribed;}).length+'</b></button>']
+      .concat(sts.map(function(v){
+        var n = contacts.filter(function(c){ return !c.unsubscribed && (c.status||'').trim()===v; }).length;
+        return '<button type="button" role="radio" aria-checked="'+(status===v)+'" class="chip2'
+             + (status===v?' on':'')+'" data-st="'+esc(v)+'">'+esc(v)+' <b>'+n+'</b></button>';
+      })).join('');
+    $('stChips').querySelectorAll('[data-st]').forEach(function(b){
+      b.addEventListener('click', function(){
+        status = b.getAttribute('data-st');
+        renderFilters(); renderList(); renderSendWho();
+      });
+    });
+  }
+
   /* ---------------------------------------------------------------- render */
 
-  function renderAll(){ renderTiles(); renderTabs(); renderSegs(); renderList(); renderPrevWho(); renderPreview(); renderSendWho(); }
+  function renderAll(){ renderTiles(); renderTabs(); renderSegs(); renderFilters(); renderList();
+                        renderPrevWho(); renderPreview(); renderSendWho(); renderFrom(); }
 
   function renderTiles(){
     var m = mailable(), cust = m.filter(function(c){ return c.customer; });
@@ -601,7 +712,7 @@ window.__mktStart = function(){
     if(seg===k) return;
     seg = k;
     $('segSel').value = k;
-    renderSegs(); renderList(); renderSendWho();
+    renderSegs(); renderFilters(); renderList(); renderSendWho();
   }
 
   function renderList(){
@@ -900,11 +1011,27 @@ window.__mktStart = function(){
   /* --------------------------------------------------------------- compose */
 
   $('tpl').addEventListener('change', function(){
-    var t = TEMPLATES[$('tpl').value];
+    var key = $('tpl').value;
+    var t = TEMPLATES[key];
     if(!t) return;
     if($('body').value.trim() && !confirm('Replace what you have written?')) { $('tpl').value=''; return; }
     $('subj').value = t.s; $('body').value = t.b;
-    renderPreview(); renderReady();
+    /* A review request only makes sense to people whose work is finished, so
+       point the filters at exactly those rather than leaving it to be
+       remembered - the wrong audience here is asking a live enquiry for a
+       review of work that has not happened. */
+    if(key === 'review'){
+      var completed = contacts.filter(function(c){ return /^completed$/i.test((c.status||'').trim()); }).length;
+      if(completed){
+        seg = 'cust'; $('segSel').value = 'cust';
+        interest = ''; status = 'Completed';
+        picked = {};
+        renderSegs(); renderFilters(); renderList();
+        logLine('Filters set to Completed \u2014 ' + completed + ' ' + (completed===1?'person':'people')
+                + '. Nothing is selected yet.');
+      }
+    }
+    renderPreview(); renderReady(); renderSendWho();
   });
   $('subj').addEventListener('input', function(){ renderPreview(); renderReady(); });
   $('body').addEventListener('input', function(){ renderPreview(); renderReady(); });
@@ -950,6 +1077,93 @@ window.__mktStart = function(){
   }
   $('imgUrl').addEventListener('input', function(){ checkImg(); renderPreview(); renderReady(); });
   $('imgAlt').addEventListener('input', function(){ checkImg(); renderPreview(); renderReady(); });
+
+  /* ---- photo upload ------------------------------------------------------
+     Resized in the browser before it goes anywhere. A phone photo is 4-6MB and
+     4000px wide; an email needs about 1200px. Sending the original would make a
+     slow email out of a fast one and waste the recipient's data.
+
+     The file goes to Drive via Apps Script, which returns a public URL. Drive is
+     the convenient host, not the best one - a photo already on acrautomobile.com
+     is more reliably displayed by email clients, and the note says so. */
+  function shrink(file, maxW, cb){
+    var fr = new FileReader();
+    fr.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var w = img.width, h = img.height;
+        if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+        try {
+          var cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          var out = cv.toDataURL('image/jpeg', 0.82);
+          cb(null, { b64: out.split(',')[1], mime: 'image/jpeg', w: w, h: h,
+                     bytes: Math.round(out.length * 0.75) });
+        } catch(e){
+          /* canvas blocked, or an image type it will not decode - fall back to
+             the original bytes rather than failing the upload */
+          cb(null, { b64: String(fr.result).split(',')[1], mime: file.type, w: img.width, h: img.height,
+                     bytes: file.size });
+        }
+      };
+      img.onerror = function(){ cb(new Error('that file is not an image we can read')); };
+      img.src = String(fr.result);
+    };
+    fr.onerror = function(){ cb(new Error('could not read the file')); };
+    fr.readAsDataURL(file);
+  }
+
+  function uploadPhoto(file, noteEl, done){
+    if(!file) return;
+    if(!/^image\//.test(file.type)){ noteEl.textContent = 'That is not an image.'; return; }
+    if(file.size > 12 * 1024 * 1024){ noteEl.textContent = 'That file is over 12MB. Please pick a smaller one.'; return; }
+    noteEl.hidden = false;
+    noteEl.textContent = 'Resizing…';
+    shrink(file, 1200, function(err, out){
+      if(err){ noteEl.textContent = err.message; return; }
+      var id = 'P' + Date.now() + Math.floor(Math.random()*900+100);
+      noteEl.textContent = 'Uploading ' + Math.round(out.bytes/1024) + 'KB (' + out.w + '×' + out.h + ')…';
+      post({ action:'mktUpload', id:id, name:file.name, mime:out.mime, dataB64:out.b64 });
+      /* the POST response is not readable, so poll for the URL it recorded */
+      var tries = 0;
+      (function poll(){
+        if(++tries > 20){ noteEl.textContent = 'Upload did not come back. Try again, or paste a URL instead.'; return; }
+        fetch(ENDPOINT + '?action=mktPhoto&id=' + encodeURIComponent(id), { cache:'no-store' })
+          .then(function(r){ return r.text(); })
+          .then(function(t){
+            var d = {}; try { d = JSON.parse(t); } catch(e){}
+            if(d.ok && d.url){
+              noteEl.innerHTML = 'Uploaded. <span style="color:var(--text-muted)">Hosted on Google Drive &mdash; '
+                + 'reliable enough for most clients, though a photo on acrautomobile.com displays more '
+                + 'consistently if you have one.</span>';
+              done(d.url);
+              return;
+            }
+            setTimeout(poll, 1500);
+          })
+          .catch(function(){ setTimeout(poll, 1500); });
+      })();
+    });
+  }
+
+  (function wirePhotoUploads(){
+    [['imgUp','imgFile','imgNote', function(url){
+        $('imgUrl').value = url;
+        $('imgUrl').dispatchEvent(new Event('input'));
+      }],
+     ['ofImgUp','ofImgFile','ofImgNote', function(url){
+        $('ofImgUrl').value = url;
+      }]].forEach(function(cfg){
+      var btn=$(cfg[0]), inp=$(cfg[1]), note=$(cfg[2]), set=cfg[3];
+      if(!btn||!inp) return;
+      btn.addEventListener('click', function(){ inp.click(); });
+      inp.addEventListener('change', function(){
+        uploadPhoto(inp.files && inp.files[0], note, set);
+        inp.value = '';
+      });
+    });
+  })();
 
   function renderPreview(){
     var who = $('prevWho').value;
@@ -1047,7 +1261,13 @@ window.__mktStart = function(){
 
     $('subj').value = subject;
     $('body').value = p.join('\n\n').replace(/<\/?strong>/g,'');
-    tab = 'send'; renderTabs(); renderPreview();
+    var ofu = ($('ofImgUrl').value||'').trim();
+    if(ofu){
+      $('imgUrl').value = ofu;
+      if(!($('imgAlt').value||'').trim()) $('imgAlt').value = svc;
+      checkImg();
+    }
+    tab = 'send'; renderTabs(); renderPreview(); renderReady();
     window.scrollTo(0,0);
   }
   $('ofBuild').addEventListener('click', buildOffer);
