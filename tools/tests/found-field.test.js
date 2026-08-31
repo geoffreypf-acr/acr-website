@@ -159,5 +159,72 @@ console.log('coverage');
   ok(dupes.length === 0, 'duplicate element ids on: ' + dupes.join(', '));
 }
 
+/* ---------- 4. the wire()-built forms ---------- */
+/* These have a shared bespoke handler that assembles `fields` from an explicit
+   list. Two of them were silently dropping the found-us answer, which the
+   coverage check above could not see: it proved the FIELD exists on 26 forms,
+   not that every handler sends it. */
+console.log('wire()-built forms (referral, trade, dealership)');
+{
+  const CASES = [
+    { page: 'referrals.html', form: 'referralForm', btn: 'referralSubmit', found: 'found-2',
+      fill: { 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
+              'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
+              'rf-fveh':'Range Rover Sport','rf-need':'Dash camera','rf-reward':'Cash by bank transfer' } },
+    { page: 'referrals.html', form: 'tradeForm', btn: 'tradeSubmit', found: 'found-1',
+      fill: { 'tr-biz':'Acme Cars','tr-title':'Mr','tr-name':'Alex','tr-sur':'Marin',
+              'tr-tel':'07700 900000','tr-email':'alex@example.com','tr-pc':'W11',
+              'tr-type':'Car dealership','tr-vol':'6\u201310 per month' } }
+  ];
+
+  CASES.forEach(c => {
+    const { d, posts, opened } = boot(c.page, 'form.js');
+    Object.entries(c.fill).forEach(([id, v]) => { const el = d.getElementById(id); if (el) el.value = v; });
+    const btn = d.getElementById(c.btn);
+
+    // blocked while the answer is missing
+    btn.dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+    ok(posts.length === 0 && opened.length === 0,
+       c.form + ': BLOCKED while "how did you find us" is empty');
+    ok(/found us/i.test((d.getElementById(c.form + 'Err') || {}).textContent || ''),
+       c.form + ': the error names the field');
+
+    // and sends it once answered
+    d.getElementById(c.found).value = 'Claude';
+    btn.dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+    ok(opened.length === 1, c.form + ': sends once answered');
+    const wa = decodeURIComponent(opened[0] || '');
+    ok(/How did you find us\?: Claude/.test(wa), c.form + ': the answer is in the WhatsApp message');
+    ok(wa.indexOf('How did you find us?') < wa.indexOf('Preferred reply'),
+       c.form + ': it sits just before "Preferred reply", as on every other form');
+    const crm = posts.find(p => /script\.google\.com/.test(p.url));
+    ok(crm && JSON.parse(crm.body).foundVia === 'Claude',
+       c.form + ': foundVia reaches the CRM (got ' + (crm && JSON.stringify(JSON.parse(crm.body).foundVia)) + ')');
+  });
+
+  /* the referral form's new question */
+  const { d, posts, opened } = boot('referrals.html', 'form.js');
+  const need = d.getElementById('rf-need');
+  ok(!!need, 'the referral form asks what the referral needs');
+  ok([...need.options].map(o => o.textContent).join('|')
+      === 'Select\u2026|Vehicle security|Dash camera|Apple CarPlay & Android Auto|Other',
+     'with the four options, in order (got ' + [...need.options].map(o => o.textContent).join('|') + ')');
+
+  Object.entries({ 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
+                   'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
+                   'found-2':'Google' }).forEach(([id, v]) => { d.getElementById(id).value = v; });
+  d.getElementById('referralSubmit').dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+  ok(opened.length === 0, 'it is mandatory - a referral with no idea what they want is a blind phone call');
+
+  need.value = 'Apple CarPlay & Android Auto';
+  d.getElementById('referralSubmit').dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const wa = decodeURIComponent(opened[0] || '');
+  ok(/What they need: Apple CarPlay & Android Auto/.test(wa), 'it reaches the WhatsApp message');
+  const crm = posts.find(p => /script\.google\.com/.test(p.url));
+  ok(crm && JSON.parse(crm.body).details === 'Apple CarPlay & Android Auto',
+     'and lands in the CRM details column, where the card shows it (got '
+     + (crm && JSON.stringify(JSON.parse(crm.body).details)) + ')');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

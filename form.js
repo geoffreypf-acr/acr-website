@@ -49,7 +49,7 @@
       year: F('Year'),
       location: F('Location'),
       urgency: F('Urgency'),
-      details: F('Details', 'Message', 'Subject', 'Also interested in'),
+      details: F('Details', 'Message', 'Subject', 'Also interested in', 'What they need'),
       foundVia: F('How did you find us?')
     };
     /* text/plain avoids a CORS preflight so Apps Script accepts it */
@@ -947,6 +947,12 @@
         var em = V(cfg.emailId);
         var emBad = badEmail(em);
         if (emBad) { err(emBad, cfg.emailId); return; }
+        /* Every form built by wire() gets this check, rather than each config
+           remembering to ask for it. The referral and trade forms were silently
+           dropping the answer because wire() assembles `fields` from an explicit
+           list and this was not on it. */
+        var fBad = badFound(form);
+        if (fBad) { err(fBad.msg, fBad.el && fBad.el.id); return; }
         var via = selVia(), fields = {};
         cfg.fields.forEach(function (f) { fields[f[1]] = V(f[0]) || '—'; });
         if (fields['Name']) fields['Name'] = personName(form) || fields['Name'];
@@ -955,6 +961,11 @@
           if (!picked.length) { err('Please choose at least one option.'); return; }
           fields[cfg.checkboxes[1]] = picked.join(', ');
         }
+        var foundEl = form.querySelector('[data-found]');
+        var foundVal = foundEl ? (foundEl.value || '').trim() : '';
+        /* crmUpload() reads it by label, so this one line covers the message,
+           the email copy and the CRM column. */
+        if (foundVal) fields['How did you find us?'] = foundVal;
         fields['Preferred reply'] = via === 'whatsapp' ? 'WhatsApp' : 'Email';
         var lines = []; for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
         var text = cfg.heading + '\n\n' + lines.join('\n');
@@ -971,10 +982,11 @@
       waLabel: 'Send referral', service: 'Customer Referral',
       heading: 'New customer referral from acrautomobile.com',
       emailId: 'rf-email', telId: 'rf-tel',
-      required: [['rf-name', 'your name'], ['rf-fname', 'the name of the person you are referring'], ['rf-ftel', 'their mobile number']],
+      required: [['rf-name', 'your name'], ['rf-fname', 'the name of the person you are referring'],
+                 ['rf-ftel', 'their mobile number'], ['rf-need', 'what they need']],
       fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'], ['rf-reg', 'Registration'],
                ['rf-fname', 'Referred name'], ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
-               ['rf-reward', 'Reward preference']]
+               ['rf-need', 'What they need'], ['rf-reward', 'Reward preference']]
     });
 
     wire({
