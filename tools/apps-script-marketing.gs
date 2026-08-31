@@ -132,7 +132,7 @@ function mktSend_(to, subject, plain, html) {
 function mktContacts_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var crm = ss.getSheetByName(SHEET_NAME) || ss.getSheets()[0];
-  var mkt = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent']);
+  var mkt = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent', 'status', 'category']);
 
   var by = {};
   mktRows_(crm).forEach(function (r) {
@@ -146,6 +146,7 @@ function mktContacts_() {
       status: status,
       service: String(r.service || '').trim(),
       foundVia: String(r.foundVia || '').trim(),
+      category: String(r.category || '').trim(),
       lastEnquiry: String(r.timestamp || ''),
       enquiries: prev ? prev.enquiries + 1 : 1,
       /* a customer is someone we have actually done work for - that distinction
@@ -177,6 +178,15 @@ function mktContacts_() {
     by[k].unsubscribed = /^(1|true|yes|y)$/i.test(String(r.unsubscribed || '').trim());
     by[k].tags         = String(r.tags || '').trim();
     by[k].lastSent     = String(r.lastSent || '');
+    /* An imported contact has no enquiry row, so there is nowhere on the CRM
+       sheet to record a status or a classification. Those live here instead.
+       Where the person DOES have an enquiry, the CRM row stays authoritative -
+       two places holding the same fact is how they end up disagreeing. */
+    if (!by[k].enquiries) {
+      by[k].status   = String(r.status || '').trim();
+      by[k].category = String(r.category || '').trim();
+      by[k].metaHere = true;      // tells the console where to write
+    }
   });
 
   return Object.keys(by).map(function (k) {
@@ -192,7 +202,7 @@ function mktContacts_() {
 /* ------------------------------------------------------------------ import */
 
 function mktImport_(data) {
-  var sh = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent']);
+  var sh = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent', 'status', 'category']);
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   var have = {};
   mktRows_(sh).forEach(function (r) { var e = mktNorm_(r.email); if (e) have[e] = true; });
@@ -230,7 +240,7 @@ function mktImport_(data) {
 /* ------------------------------------------------------------- unsubscribe */
 
 function mktSetUnsub_(email, on) {
-  var sh = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent']);
+  var sh = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent', 'status', 'category']);
   var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
   var vals = sh.getDataRange().getValues();
   var eCol = head.indexOf('email'), uCol = head.indexOf('unsubscribed');
@@ -248,6 +258,38 @@ function mktSetUnsub_(email, on) {
   sh.appendRow(head.map(function (h) { return rec[h] != null ? rec[h] : ''; }));
   mktCacheBust_();
   return true;
+}
+
+/* Sets status or category for a contact that has no enquiry row. Only touches
+   the fields it is given, so setting one does not blank the other. */
+function mktSetMeta_(data) {
+  var sh = mktSheet_(MKT_SHEET, ['email', 'name', 'consent', 'unsubscribed', 'tags', 'addedAt', 'source', 'lastSent', 'status', 'category']);
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var vals = sh.getDataRange().getValues();
+  var eCol = head.indexOf('email');
+  var em = mktNorm_(data.email);
+  if (!em) return { ok: false, error: 'no email' };
+  var fields = data.fields || {};
+
+  for (var i = 1; i < vals.length; i++) {
+    if (mktNorm_(vals[i][eCol]) === em) {
+      Object.keys(fields).forEach(function (kk) {
+        var c = head.indexOf(kk);
+        if (c !== -1) sh.getRange(i + 1, c + 1).setValue(fields[kk]);
+      });
+      mktCacheBust_();
+      return { ok: true, updated: true };
+    }
+  }
+  /* not on the Marketing sheet yet - a CRM-sourced address being classified
+     here. Add the row so the value has somewhere to live. */
+  var rec = { email: String(data.email).trim(), name: String(data.name || '').trim(),
+              consent: '', unsubscribed: '', tags: '',
+              addedAt: new Date().toISOString(), source: 'console', lastSent: '',
+              status: String(fields.status || ''), category: String(fields.category || '') };
+  sh.appendRow(head.map(function (h) { return rec[h] != null ? rec[h] : ''; }));
+  mktCacheBust_();
+  return { ok: true, created: true };
 }
 
 function mktUnsubPage_(e) {
@@ -501,6 +543,7 @@ function mktPost_(data) {
   if (data.action === 'mktImport')   return mktJson_(mktImport_(data));
   if (data.action === 'mktSave')     return mktJson_(mktSaveCampaign_(data));
   if (data.action === 'mktUpload')   return mktJson_(mktUpload_(data));
+  if (data.action === 'mktSetMeta')  return mktJson_(mktSetMeta_(data));
   if (data.action === 'mktUnsub')    { mktSetUnsub_(data.email, data.on !== false); return mktJson_({ ok: true }); }
   return null;
 }

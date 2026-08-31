@@ -497,6 +497,9 @@ window.__mktStart = function(){
   ];
   var interest = '';
   function catOfContact(c){
+    /* the payload carries it now; catBy is the fallback for a cached copy from
+       before that field existed */
+    if(c.category) return String(c.category).trim();
     var e = catBy[String(c.email||'').toLowerCase()];
     return e && e.cat ? e.cat : '';
   }
@@ -775,20 +778,20 @@ window.__mktStart = function(){
       var tags = (c.customer?'<span class="tag cust">customer</span>':'')
                + (c.imported && !c.enquiries?'<span class="tag imp">imported</span>':'')
                + (c.unsubscribed?'<span class="tag unsub">unsubscribed</span>':'');
-      /* The status select writes to the person's most recent enquiry row, which
-         is the only row a status can sensibly mean. Imported contacts have no
-         enquiry row at all, so there is nothing to write to. */
-      var canSet = !!c.lastEnquiry;
+      /* Everyone can be set. Where there is an enquiry row the write goes to
+         the CRM sheet, so the board agrees; where there is not - an imported
+         contact - it goes to the Marketing sheet instead. */
+      var canSet = true;
       var statusCell = canSet
-        ? '<select class="stsel" data-st-key="'+esc(c.lastEnquiry)+'" data-st-em="'+esc(c.email)+'">'
+        ? '<select class="stsel" data-st-key="'+esc(c.lastEnquiry||'')+'" data-st-em="'+esc(c.email)+'">'
+          + '<option value="">\u2014</option>'
           + STAGES.map(function(v){
               return '<option'+(v===(c.status||'').trim()?' selected':'')+'>'+esc(v)+'</option>';
             }).join('')
           + (STAGES.indexOf((c.status||'').trim())<0 && (c.status||'').trim()
               ? '<option selected>'+esc(c.status)+'</option>' : '')
           + '</select>'
-        : '<span title="Imported by hand, so there is no enquiry to attach a status to" '
-          + 'style="color:var(--text-muted)">&mdash;</span>';
+        : '';
       return '<tr class="'+(c.unsubscribed?'off':'')+'">'
         + '<td>'+(c.unsubscribed?'':'<input type="checkbox" data-k="'+esc(k)+'"'+(picked[k]?' checked':'')+'>')+'</td>'
         + '<td>'+esc(c.name||'—')+'<div style="margin-top:3px">'+tags+'</div></td>'
@@ -796,13 +799,13 @@ window.__mktStart = function(){
         + '<td>'+esc(c.lastEnquiry ? String(c.lastEnquiry).slice(0,10) : '—')+'</td>'
         + '<td>'+statusCell+'</td>'
         + '<td>'+(canSet
-            ? '<select class="stsel catsel" data-cat-key="'+esc(c.lastEnquiry)+'" data-cat-em="'+esc(c.email)+'">'
+            ? '<select class="stsel catsel" data-cat-key="'+esc(c.lastEnquiry||'')+'" data-cat-em="'+esc(c.email)+'">'
               + '<option value="">Auto \u2014 ' + esc(intLabel(c)) + '</option>'
               + CRM_CATS.map(function(v){
                   return '<option'+(v===catOfContact(c)?' selected':'')+'>'+esc(v)+'</option>';
                 }).join('')
               + '</select>'
-            : '<span style="color:var(--text-muted)">&mdash;</span>')+'</td>'
+            : '')+'</td>'
         + '<td>'+esc(c.foundVia||'—')+'</td>'
         + '<td>'+(c.unsubscribed
             ? '<button class="btn2" data-resub="'+esc(c.email)+'" style="height:28px;padding:0 9px;font-size:12px">Re-subscribe</button>'
@@ -861,7 +864,16 @@ window.__mktStart = function(){
   function setCategory(items, value){
     if(!items.length) return;
     items.forEach(function(it){
-      post({ action:'updateEnquiry', key: it.key, fields: { category: value } });
+      /* no enquiry row means the CRM sheet has nowhere to put this; the
+         Marketing sheet does */
+      if(it.key){
+        post({ action:'updateEnquiry', key: it.key, fields: { category: value } });
+      } else {
+        post({ action:'mktSetMeta', email: it.email, fields: { category: value } });
+        contacts.forEach(function(c){
+          if(c.email.toLowerCase()===String(it.email).toLowerCase()) c.category = value;
+        });
+      }
       var em = String(it.email).toLowerCase();
       if(!catBy[em]) catBy[em] = { ts: it.key, key: it.key, cat: '' };
       catBy[em].cat = value;
@@ -881,7 +893,11 @@ window.__mktStart = function(){
   function setStatus(items, value){
     if(!items.length || !value) return;
     items.forEach(function(it){
-      post({ action:'updateEnquiry', key: it.key, fields: { status: value } });
+      if(it.key){
+        post({ action:'updateEnquiry', key: it.key, fields: { status: value } });
+      } else {
+        post({ action:'mktSetMeta', email: it.email, fields: { status: value } });
+      }
       contacts.forEach(function(c){
         if(c.email.toLowerCase() === String(it.email).toLowerCase()){
           c.status = value;
@@ -1707,19 +1723,14 @@ window.__mktStart = function(){
     sel.innerHTML = '<option value="">Set came-for to&hellip;</option>'
       + CRM_CATS.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
     function sync(){
-      var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
-      bulkLabel(btn, sel, n, 'came-for');
+      bulkLabel(btn, sel, pickedList().length, 'came-for');
     }
     sel.addEventListener('change', sync);
     btn.addEventListener('click', function(){
-      var items = pickedList().filter(function(c){ return c.lastEnquiry; })
-                    .map(function(c){ return { key:c.lastEnquiry, email:c.email }; });
-      var skipped = pickedList().length - items.length;
+      var items = pickedList().map(function(c){ return { key:c.lastEnquiry||'', email:c.email }; });
       if(!items.length || !sel.value) return;
       if(!confirm('Set ' + items.length + ' ' + (items.length===1?'contact':'contacts')
-                + ' to came-for "' + sel.value + '"?'
-                + (skipped ? '\n\n' + skipped + ' imported contact'+(skipped===1?'':'s')
-                    + ' will be skipped \u2014 they have no enquiry to attach it to.' : ''))) return;
+                + ' to came-for "' + sel.value + '"?')) return;
       setCategory(items, sel.value);
       sel.value = ''; sync();
     });
@@ -1733,19 +1744,14 @@ window.__mktStart = function(){
     sel.innerHTML = '<option value="">Set status to&hellip;</option>'
       + STAGES.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
     function sync(){
-      var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
-      bulkLabel(btn, sel, n, 'status');
+      bulkLabel(btn, sel, pickedList().length, 'status');
     }
     sel.addEventListener('change', sync);
     btn.addEventListener('click', function(){
-      var items = pickedList().filter(function(c){ return c.lastEnquiry; })
-                    .map(function(c){ return { key:c.lastEnquiry, email:c.email }; });
-      var skipped = pickedList().length - items.length;
+      var items = pickedList().map(function(c){ return { key:c.lastEnquiry||'', email:c.email }; });
       if(!items.length || !sel.value) return;
       if(!confirm('Set ' + items.length + ' ' + (items.length===1?'contact':'contacts')
-                + ' to "' + sel.value + '"?'
-                + (skipped ? '\n\n' + skipped + ' imported contact'+(skipped===1?'':'s')
-                    + ' will be skipped \u2014 they have no enquiry to attach a status to.' : ''))) return;
+                + ' to "' + sel.value + '"?')) return;
       setStatus(items, sel.value);
       sel.value = ''; sync();
     });

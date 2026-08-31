@@ -635,13 +635,41 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(!!sel, 'each row has a status select');
     ok(sel.value === 'Quoted', 'it shows the current status (got ' + sel.value + ')');
     ok([...sel.options].map(o => o.textContent).join('|')
-        === 'New|Call back|Follow Up 1|Follow Up 2|Quoted|Booked|Invoice sent|Completed|On Hold|Not Serious|Lost|Archive',
-       'with the CRM stages in the CRM order');
+        === '—|New|Call back|Follow Up 1|Follow Up 2|Quoted|Booked|Invoice sent|Completed|On Hold|Not Serious|Lost|Archive',
+       'with a blank option then the CRM stages in the CRM order (got '
+       + [...sel.options].map(o => o.textContent).join('|') + ')');
 
-    // an imported contact has no enquiry row to write to
+    /* An imported contact has no enquiry row, but can still be classified - the
+       value goes to the Marketing sheet instead. With 291 imported contacts,
+       leaving these controls dead would make them useless for most of the list. */
     const imp = rowFor('imported@example');
-    ok(imp && !imp.querySelector('.stsel'),
-       'an imported contact has no status select - there is no enquiry to attach one to');
+    ok(imp && !!imp.querySelector('.stsel'),
+       'an imported contact DOES get a status select');
+    calls.post.length = 0;
+    const impSel = imp.querySelector('.stsel:not(.catsel)');
+    impSel.value = 'Booked';
+    impSel.dispatchEvent(new w.Event('change', { bubbles: true }));
+    await wait(80);
+    ok(!calls.post.some(p => p.action === 'updateEnquiry'),
+       'it does NOT post updateEnquiry - there is no row key to aim at');
+    const meta = calls.post.find(p => p.action === 'mktSetMeta');
+    ok(!!meta, 'it posts mktSetMeta instead');
+    ok(meta && meta.email === 'imported@example.com', 'keyed on the address (got ' + (meta && meta.email) + ')');
+    ok(meta && meta.fields && meta.fields.status === 'Booked',
+       'with the new status (got ' + (meta && JSON.stringify(meta.fields)) + ')');
+    ok(meta && !('category' in (meta.fields || {})),
+       'and only that field, so setting a status does not blank the came-for');
+
+    // came-for on the same imported contact
+    calls.post.length = 0;
+    const impCat = rowFor('imported@example').querySelector('.catsel');
+    impCat.value = 'Dash cameras';
+    impCat.dispatchEvent(new w.Event('change', { bubbles: true }));
+    await wait(80);
+    const meta2 = calls.post.find(p => p.action === 'mktSetMeta');
+    ok(meta2 && meta2.fields.category === 'Dash cameras',
+       'came-for routes the same way (got ' + (meta2 && JSON.stringify(meta2.fields)) + ')');
+    ok(meta2 && !('status' in (meta2.fields || {})), 'and does not blank the status');
 
     // changing it writes through the CRM's own action
     calls.post.length = 0;
@@ -722,12 +750,16 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     bulkBtn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
     await wait(120);
     const updates = calls.post.filter(p => p.action === 'updateEnquiry');
-    /* 7 contacts, minus the unsubscribed one (never selectable), minus the
-       imported one (no enquiry row to write to) = 5 */
-    ok(updates.length === 5,
-       'one write per selected contact WITH an enquiry row; the unsubscribed and imported ones are skipped (got ' + updates.length + ')');
-    ok(updates.every(u => u.fields.status === 'Lost'), 'all set to the chosen status');
+    /* 7 contacts minus the unsubscribed one (never selectable) = 6 writes: 5 to
+       the CRM sheet, and the imported one to the Marketing sheet */
+    const metas = calls.post.filter(p => p.action === 'mktSetMeta');
+    ok(updates.length === 5, '5 CRM writes, one per contact with an enquiry row (got ' + updates.length + ')');
+    ok(metas.length === 1, 'and 1 Marketing-sheet write for the imported contact (got ' + metas.length + ')');
+    ok(updates.every(u => u.fields.status === 'Lost') && metas.every(m => m.fields.status === 'Lost'),
+       'all set to the chosen status, wherever they were written');
     ok(new Set(updates.map(u => u.key)).size === updates.length, 'no row written twice');
+    ok(!updates.concat(metas).some(x => /gone@example/.test(JSON.stringify(x))),
+       'and the unsubscribed contact is not written at all');
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
