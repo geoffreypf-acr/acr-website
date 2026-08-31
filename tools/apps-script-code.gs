@@ -1,7 +1,7 @@
-// ACR Automobile — enquiry logger + reader + booking emailer
+// ACR Automobile - enquiry logger + reader + booking emailer
 var SHEET_NAME = 'Sheet1';           // change if your tab is named differently
 var SENDER = 'info@acrautomobile.com';      // shown as "From" (only if it's a verified send-as alias)
-var NOTIFY = 'geoffreypf@acrautomobile.com'; // your REAL inbox — gets a copy + the test email
+var NOTIFY = 'geoffreypf@acrautomobile.com'; // your REAL inbox - gets a copy + the test email
 
 function doPost(e) {
   try {
@@ -73,7 +73,7 @@ function doPost(e) {
 
     // 2) Otherwise log a website enquiry into the sheet.
     //    Columns are matched by header name, so new fields land in the right place
-    //    and any missing (known) column is created automatically — no code edits
+    //    and any missing (known) column is created automatically - no code edits
     //    needed when the website starts sending a new field.
     var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME)
              || SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
@@ -96,7 +96,7 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  // Force pull — the CRM calls this with ?action=sync to import new email
+  // Force pull - the CRM calls this with ?action=sync to import new email
   // enquiries and missed calls on demand. run_() and missedCalls_() live in
   // gmailToCrm.gs in this same project.
   if (e && e.parameter && e.parameter.action === 'sync') {
