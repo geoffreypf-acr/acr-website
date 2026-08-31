@@ -77,6 +77,9 @@
            border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-primary);
            font-family: var(--font-body); max-width: 132px; }
   .stsel:hover { border-color: var(--border-strong); }
+  /* keep a disabled bulk button legible - .btn2:disabled drops to .45 opacity,
+     which makes an explanatory label hard to read */
+  .bulk-st .btn2:disabled { opacity: .72; cursor: help; }
   .bulk-st { display: inline-flex; gap: 7px; align-items: center; margin-left: auto; }
   .upl { display: flex; gap: 8px; align-items: stretch; }
   .upl input.f { flex: 1 1 auto; min-width: 0; }
@@ -1677,6 +1680,27 @@ window.__mktStart = function(){
     setTimeout(batch, 2400);
   });
 
+  /* A greyed-out button that does not say why is a dead end - it looks broken
+     rather than waiting for something. Both bulk buttons name the missing half:
+     no value chosen, nothing ticked, or both. */
+  function bulkLabel(btn, sel, n, what){
+    var noVal = !sel.value;
+    btn.disabled = noVal || !n;
+    if(noVal && !n){
+      btn.textContent = 'Set ' + what;
+      btn.title = 'Choose a ' + what + ' above, and tick the contacts to apply it to.';
+    } else if(noVal){
+      btn.textContent = 'Choose a ' + what;
+      btn.title = n + ' selected \u2014 now pick a ' + what + ' from the dropdown.';
+    } else if(!n){
+      btn.textContent = 'Tick some contacts';
+      btn.title = 'Nothing is selected. Tick a row, or use "Select all shown".';
+    } else {
+      btn.textContent = 'Set ' + what + ' \u2014 ' + n;
+      btn.title = 'Applies "' + sel.value + '" to ' + n + ' ' + (n===1?'contact':'contacts') + '.';
+    }
+  }
+
   (function bulkCategory(){
     var sel=$('bulkCat'), btn=$('bulkCatApply');
     if(!sel||!btn) return;
@@ -1684,8 +1708,7 @@ window.__mktStart = function(){
       + CRM_CATS.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
     function sync(){
       var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
-      btn.disabled = !sel.value || !n;
-      btn.textContent = n ? ('Set came-for \u2014 ' + n) : 'Set came-for';
+      bulkLabel(btn, sel, n, 'came-for');
     }
     sel.addEventListener('change', sync);
     btn.addEventListener('click', function(){
@@ -1711,8 +1734,7 @@ window.__mktStart = function(){
       + STAGES.map(function(v){ return '<option>'+esc(v)+'</option>'; }).join('');
     function sync(){
       var n = pickedList().filter(function(c){ return c.lastEnquiry; }).length;
-      btn.disabled = !sel.value || !n;
-      btn.textContent = n ? ('Set status \u2014 ' + n) : 'Set status';
+      bulkLabel(btn, sel, n, 'status');
     }
     sel.addEventListener('change', sync);
     btn.addEventListener('click', function(){

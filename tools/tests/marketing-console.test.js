@@ -674,15 +674,48 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     /* bulk */
     const bulkSel = d.getElementById('bulkStatus'), bulkBtn = d.getElementById('bulkApply');
     ok(!!bulkSel && !!bulkBtn, 'there is a bulk status control');
-    ok(bulkBtn.disabled, 'disabled with nothing selected');
+
+    /* A disabled button must say WHY. All four states are checked because the
+       screen previously showed a greyed "Set came-for" with a value chosen and
+       gave no clue that nothing was selected. */
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    bulkSel.value = ''; bulkSel.dispatchEvent(new w.Event('change'));
+    await wait(50);
+    ok(bulkBtn.disabled && /Set status/.test(bulkBtn.textContent) && /Choose a status/.test(bulkBtn.title),
+       'nothing chosen, nothing selected -> asks for both (title: ' + bulkBtn.title + ')');
+
     d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
     await wait(50);
-    ok(bulkBtn.disabled, 'still disabled until a status is chosen');
-    bulkSel.value = 'Lost';
-    bulkSel.dispatchEvent(new w.Event('change'));
-    await wait(40);
+    ok(bulkBtn.disabled && /Choose a status/.test(bulkBtn.textContent),
+       'selected but no value -> the LABEL asks for a value (got ' + bulkBtn.textContent + ')');
+    ok(/now pick a status/.test(bulkBtn.title), 'and the tooltip says the selection is already made');
+
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    bulkSel.value = 'Lost'; bulkSel.dispatchEvent(new w.Event('change'));
+    await wait(50);
+    ok(bulkBtn.disabled && /Tick some contacts/.test(bulkBtn.textContent),
+       'THE REPORTED CASE: value chosen but nothing ticked -> the label says to tick some (got '
+       + bulkBtn.textContent + ')');
+    ok(/Nothing is selected/.test(bulkBtn.title), 'and the tooltip explains it');
+
+    d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
     ok(!bulkBtn.disabled, 'enabled once both are set');
     ok(/Set status — \d+/.test(bulkBtn.textContent), 'and it says how many (got ' + bulkBtn.textContent + ')');
+    ok(/Applies "Lost" to \d+/.test(bulkBtn.title), 'and exactly what it will do (title: ' + bulkBtn.title + ')');
+
+    /* the came-for button behaves the same way */
+    const catSel = d.getElementById('bulkCat'), catBtn = d.getElementById('bulkCatApply');
+    catSel.value = 'Vehicle security'; catSel.dispatchEvent(new w.Event('change'));
+    await wait(40);
+    ok(!catBtn.disabled && /Set came-for — \d+/.test(catBtn.textContent),
+       'the came-for button enables with a selection (got ' + catBtn.textContent + ')');
+    d.getElementById('selNone').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
+    ok(catBtn.disabled && /Tick some contacts/.test(catBtn.textContent),
+       'and explains itself the same way when the selection is cleared (got ' + catBtn.textContent + ')');
+    d.getElementById('selAll').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    await wait(50);
 
     calls.post.length = 0;
     w.confirm = () => true;
