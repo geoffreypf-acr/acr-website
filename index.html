@@ -73,25 +73,12 @@ gtag('config', 'G-QJYXP51NBR');
     <div class="nav-cta">
       <a class="nav-phone" href="tel:07468844431"><i data-lucide="phone" style="width:15px;height:15px"></i> 07468 844431</a>
       <a class="btn btn-gold btn-sm" href="#quote">Request a quote</a>
-      <button class="nav-burger" id="navBurger" aria-label="Open menu"><i data-lucide="menu"></i></button>
+      
     </div>
   </div>
 </header>
 
-<!-- MOBILE OFF-CANVAS NAV -->
-<div class="mnav" id="mnav">
-  <div class="mnav-top">
-    <img class="logo" src="assets/logo-silver.png" alt="ACR Automobile" style="height:26px" />
-    <button class="mnav-close" id="mnavClose" aria-label="Close menu"><i data-lucide="x"></i></button>
-  </div>
-  <details><summary>Security <i data-lucide="chevron-down" class="chev"></i></summary><div class="sub"><a href="meta-trak-s5-deadlock-london.html">Meta Trak S5 Deadlock</a><a href="meta-trak-s5-installation-london.html">Meta Trak S5 Tracker</a><a href="meta-trak-s7-installation-london.html">Meta Trak S7 Tracker</a><a href="tracker-immobiliser-packages-london.html">Tracker &amp; Immobiliser Packages</a><a href="immobiliser-installation-london.html">Vehicle Immobiliser</a></div></details>
-  <details><summary>Vehicles <i data-lucide="chevron-down" class="chev"></i></summary><div class="sub"><a href="audi-tracker-installation.html">Audi</a><a href="bentley-tracker-installation.html">Bentley</a><a href="bmw-tracker-installation.html">BMW</a><a href="ferrari-tracker-installation.html">Ferrari</a><a href="lamborghini-tracker-installation.html">Lamborghini</a><a href="defender-tracker-installation.html">Land Rover &amp; Defender</a><a href="mercedes-tracker-installation.html">Mercedes</a><a href="porsche-tracker-installation.html">Porsche</a><a href="range-rover-tracker-installation.html">Range Rover</a><a href="rolls-royce-tracker-installation.html">Rolls-Royce</a></div></details>
-  <details><summary>Areas <i data-lucide="chevron-down" class="chev"></i></summary><div class="sub"><a href="tracker-installation-chelsea.html">Chelsea</a><a href="tracker-installation-kensington.html">Kensington</a><a href="tracker-installation-knightsbridge.html">Knightsbridge</a><a href="tracker-installation-mayfair.html">Mayfair</a><a href="tracker-installation-richmond.html">Richmond</a><a href="tracker-installation-wimbledon.html">Wimbledon</a><a href="areas.html">All areas &rarr;</a></div></details>
-  <details><summary>Services <i data-lucide="chevron-down" class="chev"></i></summary><div class="sub"><a href="apple-carplay-installation-london.html">Apple CarPlay &amp; Android Auto</a><a href="concierge-services.html">Automotive Concierge</a><a href="battery-recovery-concierge.html">Battery &amp; Recovery</a><details class="msub"><summary>BMW / Mini iDrive <i data-lucide="chevron-down" class="chev"></i></summary><div class="sub2"><a href="bmw-idrive-reboot.html">BMW / Mini iDrive Reboot</a><a href="bmw-mini-coding-programming.html">Coding &amp; Programming</a></div></details><a href="dash-camera-installation-london.html">Dash Camera Installation</a></div></details>
-  <a class="m-direct" href="guides.html">Guides</a>
-  <a class="m-direct" href="#why">Why ACR</a>
-  <a class="btn btn-gold" href="#quote">Request a quote <i data-lucide="arrow-right"></i></a>
-</div>
+
 
 <!-- HERO -->
 <main id="top">
@@ -548,12 +535,8 @@ gtag('config', 'G-QJYXP51NBR');
     var nav = document.getElementById('siteNav');
     var onScroll = function () { nav.classList.toggle('scrolled', window.scrollY > 40); };
     window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
-    var burger = document.getElementById('navBurger');
-    var close = document.getElementById('mnavClose');
-    var mnav = document.getElementById('mnav');
-    if (burger) burger.addEventListener('click', function () { document.body.classList.add('menu-open'); });
-    if (close) close.addEventListener('click', function () { document.body.classList.remove('menu-open'); });
-    mnav.querySelectorAll('a[href]').forEach(function (a) { a.addEventListener('click', function () { document.body.classList.remove('menu-open'); }); });
+    /* the burger and the off-canvas menu are built by nav-mobile.js from the
+       real nav, so there is nothing to wire up here any more */
   })();
 </script>
 <script src="wiz.js"></script>
@@ -598,5 +581,6 @@ gtag('config', 'G-QJYXP51NBR');
 })();
 </script>
 <script src="analytics-events.js"></script>
+<script src="nav-mobile.js"></script>
 </body>
 </html>

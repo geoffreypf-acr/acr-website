@@ -549,3 +549,11 @@ section[id], #quote { scroll-margin-top: 110px; }
 .mnav .sub2 { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px 16px; }
 .mnav .sub2 a { padding: 9px 0; font-size: 14.5px; color: var(--text-secondary); }
 .mnav .sub2 a:hover { color: var(--signal-300); }
+
+/* Supplements for the generated mobile menu (nav-mobile.js). Duplicated from
+   site.css because index.html loads home.css instead - four rules is a cheaper
+   duplication than pulling a whole second stylesheet onto the homepage. */
+.mnav a.deep { padding-left: 16px; opacity: .82; }
+.mnav a.mnav-cta { margin-top: 14px; color: var(--silver-ink); background: var(--silver-fill); border-radius: var(--radius-md); text-align: center; font-weight: 600; padding: 12px 16px; }
+.mnav[aria-hidden="true"] { pointer-events: none; }
+body.menu-open { overflow: hidden; }
