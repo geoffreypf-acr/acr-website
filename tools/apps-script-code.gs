@@ -7,8 +7,12 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
-    // marketing console (marketing.gs): list, import, campaign save, unsubscribe
-    if (data.action && data.action.indexOf('mkt') === 0) { var mr = mktPost_(data); if (mr) return mr; }
+    // marketing console (marketing.gs): list, import, campaign save, unsubscribe.
+    // typeof-guarded: if that file is missing, this must degrade rather than
+    // take the whole endpoint down with it.
+    if (data.action && data.action.indexOf('mkt') === 0 && typeof mktPost_ === 'function') {
+      var mr = mktPost_(data); if (mr) return mr;
+    }
 
     // 1) Send a booking confirmation email to the customer (from the Booking Console)
     if (data.action === 'sendBookingEmail') {
@@ -101,7 +105,14 @@ function doPost(e) {
 function doGet(e) {
   // marketing console + unsubscribe links (marketing.gs). Returns null for
   // anything it does not own, so the CRM's own actions fall through untouched.
-  if (e && e.parameter && e.parameter.action) { var mg = mktGet_(e); if (mg) return mg; }
+  //
+  // The typeof guard is not optional. Without it, deploying Code.gs before
+  // marketing.gs exists throws "mktGet_ is not defined" for EVERY request that
+  // carries an action - which took the CRM's own ?action=sync down with it.
+  // One file missing must never break the other.
+  if (e && e.parameter && e.parameter.action && typeof mktGet_ === 'function') {
+    var mg = mktGet_(e); if (mg) return mg;
+  }
 
   // Force pull - the CRM calls this with ?action=sync to import new email
   // enquiries and missed calls on demand. run_() and missedCalls_() live in

@@ -377,13 +377,25 @@ function mktPost_(data) {
    ADD THESE TWO LINES TO Code.gs
    ============================================================
 
+   PASTE THIS FILE FIRST, then add the dispatchers, then deploy. The typeof
+   guards mean the order cannot break anything, but doing it in this order means
+   the feature works on the first deploy rather than the second.
+
    In doPost(e), immediately after   var data = JSON.parse(e.postData.contents);
 
-     if (data.action && data.action.indexOf('mkt') === 0) { var r = mktPost_(data); if (r) return r; }
+     if (data.action && data.action.indexOf('mkt') === 0 && typeof mktPost_ === 'function') {
+       var r = mktPost_(data); if (r) return r;
+     }
 
    In doGet(e), as the FIRST line inside the function:
 
-     if (e && e.parameter && e.parameter.action) { var g = mktGet_(e); if (g) return g; }
+     if (e && e.parameter && e.parameter.action && typeof mktGet_ === 'function') {
+       var g = mktGet_(e); if (g) return g;
+     }
+
+   The typeof checks matter: without them, deploying Code.gs while this file is
+   missing throws "mktGet_ is not defined" on every request carrying an action,
+   which also breaks the CRM's own ?action=sync.
 
    Then Deploy > Manage deployments > pencil > New version.
    ============================================================ */
