@@ -7,22 +7,26 @@
  *   Dashboard   crm-a7c93f.html              (same file, dashboard view)
  *   Marketing   marketing-console-a7c93f.html
  *   Booking     booking-console-a7c93f.html
- *   ACR SEO     external (Vercel) - the URL is stored locally, see below
+ *   ACR SEO     https://acr-seo-dashboard.vercel.app/performance (new tab)
  *
  * Pipeline and Dashboard are two views of ONE file, toggled by the
  * acr_crm_dash localStorage key. This script writes that key from the URL hash
  * BEFORE the CRM boots, so #dashboard and #pipeline are honest deep links
  * rather than "open the CRM and then click a button".
  *
- * The SEO dashboard lives on Vercel and its URL is not in this repo, so the
- * first time it is picked the user is asked once and it is remembered. That
- * avoids hard-coding a guess, and avoids blocking the whole switcher on it.
+ * The SEO dashboard is a separate Vercel app behind its own login, so it opens
+ * in a new tab rather than replacing the console you are working in - and the
+ * dropdown snaps back afterwards so it never claims you are somewhere you are
+ * not.
  *
  * Mount by putting <span data-console-nav></span> in the header and loading
  * this file. Styling is inline on purpose: three consoles, three stylesheets,
  * and a switcher that looks different on each would be worse than none.
  */
 (function () {
+ /* The SEO dashboard's own URL. Overridable per browser via the acr_seo_url
+    localStorage key, so it can be pointed elsewhere without a code change. */
+  var SEO_URL  = 'https://acr-seo-dashboard.vercel.app/performance';
   var SEO_KEY  = 'acr_seo_url';
   var DASH_KEY = 'acr_crm_dash';
 
@@ -64,26 +68,16 @@
   }
 
   function seoUrl() {
-    try { return (localStorage.getItem(SEO_KEY) || '').trim(); } catch (e) { return ''; }
-  }
-
-  function askSeoUrl() {
-    var v = window.prompt(
-      'Paste the ACR SEO dashboard URL.\n\nIt is stored in this browser only, so you '
-      + 'only have to do this once per device.', seoUrl() || 'https://');
-    if (v == null) return '';
-    v = String(v).trim();
-    if (!/^https?:\/\/.+\..+/.test(v)) { if (v) window.alert('That does not look like a URL.'); return ''; }
-    try { localStorage.setItem(SEO_KEY, v); } catch (e) {}
-    return v;
+    var stored = '';
+    try { stored = (localStorage.getItem(SEO_KEY) || '').trim(); } catch (e) {}
+    return /^https?:\/\/.+\..+/.test(stored) ? stored : SEO_URL;
   }
 
   function go(key) {
     var l = LINKS.filter(function (x) { return x.k === key; })[0];
     if (!l) return;
     if (l.external) {
-      var u = seoUrl() || askSeoUrl();
-      if (u) window.open(u, '_blank', 'noopener');
+      window.open(seoUrl(), '_blank', 'noopener');
       return;                                     // stay put - it opened in a new tab
     }
     var target = l.file + (l.hash ? '#' + l.hash : '');
@@ -135,8 +129,8 @@
       sel.addEventListener('change', function () {
         var v = sel.value;
         if (v === cur) return;
-        /* put the dropdown back if the destination opens in a new tab, or the
-           user cancels the URL prompt - otherwise it lies about where you are */
+        /* put the dropdown back when the destination opened in a new tab -
+           otherwise it lies about which console you are looking at */
         var isExternal = LINKS.filter(function (x) { return x.k === v; })[0].external;
         go(v);
         if (isExternal) sel.value = cur;

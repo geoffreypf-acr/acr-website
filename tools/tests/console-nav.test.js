@@ -107,37 +107,36 @@ console.log('navigation');
 /* ---------- the external SEO entry ---------- */
 console.log('ACR SEO (external)');
 {
-  // no URL stored yet -> asks once, remembers, opens in a new tab
+  // the real URL is built in - no prompt, no setup
   const a = boot('crm-a7c93f.html', '', { acr_crm_dash: '0' });
-  a.w.__promptReply = 'https://acr-seo.vercel.app';
+  a.w.prompt = () => { throw new Error('must not prompt'); };
   const s = a.d.querySelector('[data-console-nav] select');
   s.value = 'seo'; s.dispatchEvent(new a.w.Event('change'));
-  ok(a.mem.acr_seo_url === 'https://acr-seo.vercel.app', 'the URL is asked for once and remembered');
-  ok(a.opened.length === 1 && /acr-seo\.vercel\.app/.test(a.opened[0]), 'it opens in a new tab');
-  ok(a.navs.length === 0, 'the current console is not navigated away from');
-  ok(s.value === 'pipeline', 'the dropdown snaps back — it must not claim you are on the SEO dashboard');
+  ok(a.opened.length === 1, 'it opens exactly once');
+  ok(/^https:\/\/acr-seo-dashboard\.vercel\.app\/performance$/.test(a.opened[0]),
+     'it opens the real dashboard URL (got ' + a.opened[0] + ')');
+  ok(a.navs.length === 0, 'the console you are in is not navigated away from');
+  ok(s.value === 'pipeline', 'the dropdown snaps back - it must not claim you are on the SEO dashboard');
 
-  // stored -> no prompt
-  const b = boot('crm-a7c93f.html', '', { acr_crm_dash: '0', acr_seo_url: 'https://seo.example.com' });
-  b.w.__promptReply = null;
+  // a stored override wins, so the URL can change without a code edit
+  const b = boot('crm-a7c93f.html', '', { acr_crm_dash: '0', acr_seo_url: 'https://seo.example.com/x' });
   const s2 = b.d.querySelector('[data-console-nav] select');
   s2.value = 'seo'; s2.dispatchEvent(new b.w.Event('change'));
-  ok(b.opened.length === 1 && /seo\.example\.com/.test(b.opened[0]), 'a stored URL opens without asking again');
+  ok(b.opened[0] === 'https://seo.example.com/x', 'a stored override wins over the default');
 
-  // cancelled prompt -> nothing happens
-  const c = boot('crm-a7c93f.html', '', { acr_crm_dash: '0' });
-  c.w.__promptReply = null;
+  // rubbish in storage must not break the link
+  const c = boot('crm-a7c93f.html', '', { acr_crm_dash: '0', acr_seo_url: 'not a url' });
   const s3 = c.d.querySelector('[data-console-nav] select');
   s3.value = 'seo'; s3.dispatchEvent(new c.w.Event('change'));
-  ok(c.opened.length === 0 && !c.mem.acr_seo_url, 'cancelling the prompt opens nothing and stores nothing');
-  ok(s3.value === 'pipeline', 'and the dropdown still shows where you actually are');
+  ok(/acr-seo-dashboard/.test(c.opened[0] || ''),
+     'a corrupt stored value falls back to the default rather than opening nothing');
 
-  // rubbish -> rejected
-  const e = boot('crm-a7c93f.html', '', { acr_crm_dash: '0' });
-  e.w.__promptReply = 'not a url';
+  // opened in a new tab, not the current one
+  const e = boot('marketing-console-a7c93f.html');
   const s4 = e.d.querySelector('[data-console-nav] select');
   s4.value = 'seo'; s4.dispatchEvent(new e.w.Event('change'));
-  ok(!e.mem.acr_seo_url && e.opened.length === 0, 'a non-URL is rejected rather than stored');
+  ok(e.opened.length === 1 && e.navs.length === 0, 'same behaviour from the marketing console');
+  ok(s4.value === 'marketing', 'and it snaps back to Marketing there');
 }
 
 /* ---------- no double mount ---------- */
