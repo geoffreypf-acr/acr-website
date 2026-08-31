@@ -690,6 +690,13 @@
       if (pBad) { derr(pBad.msg, pBad.el); return; }
       var eBad = badEmail(email);
       if (eBad) { derr(eBad, de); return; }
+      /* This handler builds its own fields object, so it needs its own check -
+         the generic one in the assessment handler does not run here. Without it
+         the field was mandatory on 25 forms and optional on this one. */
+      var fBad = badFound(form);
+      if (fBad) { derr(fBad.msg, fBad.el); return; }
+      var foundEl = form.querySelector('[data-found]');
+      var foundVal = foundEl ? (foundEl.value || '').trim() : '';
       var live = (liveCb && !liveCb.disabled && liveCb.checked) ? 'Yes' : 'No';
       /* Same order as the security assessment's message \u2014 who they are, how to
          reach them, the vehicle, then what they want \u2014 so an enquiry that came
@@ -704,6 +711,10 @@
       };
       /* Anything else they ticked on the form that sent them here. */
       if (alsoWanted) fields['Also interested in'] = alsoWanted;
+      /* Last, matching where the other forms put it, so an enquiry that came
+         through both reads identically. crmUpload() picks it up from here by
+         label, so the direct-visitor path needs no extra wiring. */
+      if (foundVal) fields['How did you find us?'] = foundVal;
       var lines = [];
       for (var k in fields) if (fields.hasOwnProperty(k)) lines.push(k + ': ' + fields[k]);
       var text = 'New dash cam enquiry from acrautomobile.com\n\n' + lines.join('\n');
@@ -718,6 +729,7 @@
           postcode: (dpc && dpc.value || '').trim(),
           make: mk, model: (dmd && dmd.value || '').trim(), year: yr,
           preferredReply: fields['Preferred reply'],
+          foundVia: foundVal,
           details: ['Coverage: ' + cov, 'Battery: ' + (get('bat') || 'None'), 'Live view: ' + live]
                      .concat(alsoWanted ? ['Also interested in: ' + alsoWanted] : []).join(' \u00b7 ')
         });
