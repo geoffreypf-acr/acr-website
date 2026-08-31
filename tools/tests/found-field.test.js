@@ -45,8 +45,9 @@ console.log('form.js — contact.html');
   const found = form.querySelector('[data-found]');
   ok(!!found, 'the found field exists on contact.html');
   ok(found.tagName === 'SELECT', 'it is a select');
-  const WANT = ['Google', 'ChatGPT', 'Claude', 'Gemini', 'Referral', 'Website', 'Other'];
-  ok(WANT.every(o => [...found.options].some(x => x.text === o)), 'all seven options present');
+  const WANT = ['Google', 'ChatGPT', 'Claude', 'Gemini', 'Referral', 'Other'];
+  ok(WANT.every(o => [...found.options].some(x => x.text === o)), 'all six options present');
+  ok(![...found.options].some(x => x.text === 'Website'), 'Website is not offered on the form');
   ok([...found.options].slice(1).map(o => o.text).join(',') === WANT.join(','),
      'options are in the agreed order (got ' + [...found.options].slice(1).map(o => o.text).join(',') + ')');
   ok(found.options[0].disabled && found.options[0].value === '', 'placeholder option is unselectable');
@@ -69,10 +70,10 @@ console.log('form.js — contact.html');
   ok(!!err && /how you found us|found us/i.test(d.body.textContent), 'an error mentioning how they found us is shown');
 
   // now answer it and resend
-  setSel(found, 'Website');
+  setSel(found, 'Other');
   send.dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
-  ok(/How did you find us\?: Website/.test(decodeURIComponent(opened[0] || '')),
-     'the new "Website" option round-trips into the message');
+  ok(/How did you find us\?: Other/.test(decodeURIComponent(opened[0] || '')),
+     '"Other" round-trips into the message');
   opened.length = 0; posts.length = 0;
   setSel(found, 'ChatGPT');
   send.dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));

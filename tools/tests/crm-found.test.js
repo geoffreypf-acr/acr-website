@@ -26,6 +26,7 @@ const ROWS = [
     service: 'Meta Trak S7', make: 'Mercedes', model: 'G-Class', foundVia: 'Gemini', source: 'index.html' },
   { timestamp: '2026-08-25T10:00:00.000Z', name: 'Ellis Grant',  email: 'f@x.com', status: 'New',
     service: 'Tracker', make: 'Ferrari', model: 'Roma', foundVia: 'Claude', source: 'tide' },
+  // 'Website' is no longer offered, but a row already holding it must still show
   { timestamp: '2026-08-26T10:00:00.000Z', name: 'Web Walkin', email: 'j@x.com', status: 'New',
     service: 'Tracker', foundVia: 'Website', source: 'contact.html' },
   { timestamp: '2026-08-27T10:00:00.000Z', name: 'Odd Route',  email: 'k@x.com', status: 'New',
@@ -82,8 +83,9 @@ const writes = w.__writes;
     const rows = [...chart.querySelectorAll('.row')];
     const google = rows.find(r => /Google/.test(r.textContent));
     ok(google && /2/.test(google.querySelector('.num').textContent), 'Google counted twice (got ' + (google && google.querySelector('.num').textContent) + ')');
-    ok(/Website/.test(txt) && /Other/.test(txt), 'Website and Other appear in the source group');
-    ok(rows.length === 7, 'seven distinct sources charted, got ' + rows.length);
+    ok(/Other/.test(txt), '"Other" appears in the source group');
+    ok(/Website/.test(txt), 'a legacy "Website" value still charts even though it is no longer offered');
+    ok(rows.length === 7, 'seven distinct values charted (six offered + one legacy), got ' + rows.length);
     ok(rows[0] === google, 'the chart is sorted, biggest first');
     ok(/2 earlier records predate the question/.test(txt),
        'says how many rows predate the field (got: ' + (txt.match(/\d+ earlier record[^.]*\./) || ['none']) [0] + ')');
@@ -108,8 +110,8 @@ const writes = w.__writes;
     const sel = d.getElementById('dFound');
     ok(!!sel, 'the drawer has a "Where they found us" field');
     ok(sel && sel.value === 'ChatGPT', 'it loads the record\'s value (got ' + (sel && sel.value) + ')');
-    ok(sel && [...sel.options].map(o => o.value).join(',') === ',Google,ChatGPT,Claude,Gemini,Referral,Website,Other',
-       'drawer offers blank + all seven (got ' + (sel && [...sel.options].map(o => o.value).join(',')) + ')');
+    ok(sel && [...sel.options].map(o => o.value).join(',') === ',Google,ChatGPT,Claude,Gemini,Referral,Other',
+       'drawer offers blank + the six (got ' + (sel && [...sel.options].map(o => o.value).join(',')) + ')');
 
     writes.length = 0;
     sel.value = 'Referral';
