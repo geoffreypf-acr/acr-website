@@ -73,7 +73,10 @@
 
     Array.prototype.forEach.call(nav.children, function (child) {
       if (child.tagName === 'A') {
-        addLink(panel, child.getAttribute('href'), labelOf(child));
+        /* m-direct is what makes a top-level link match the group headings.
+           Without it these sat at body size with no divider, which is why
+           Guides and the rest looked like a different menu. */
+        addLink(panel, child.getAttribute('href'), labelOf(child), 'm-direct');
         return;
       }
       if (!child.classList || !child.classList.contains('nav-item')) return;
@@ -82,7 +85,7 @@
       var drop = child.querySelector(':scope > .dropdown');
       if (!head) return;
 
-      if (!drop) { addLink(panel, head.getAttribute('href'), labelOf(head)); return; }
+      if (!drop) { addLink(panel, head.getAttribute('href'), labelOf(head), 'm-direct'); return; }
 
       var det = document.createElement('details');
       var sum = document.createElement('summary');
@@ -120,9 +123,8 @@
       panel.appendChild(det);
     });
 
-    /* the phone number and quote button, which live outside nav.main */
-    var tel = header.querySelector('a[href^="tel:"]');
-    if (tel) addLink(panel, tel.getAttribute('href'), 'Call ' + (tel.textContent || '').replace(/\s+/g, ' ').trim());
+    /* No phone number here on purpose. Mobile already has a fixed call bar and
+       a floating call button, so a third copy in the menu is clutter. */
     var quote = header.querySelector('.nav-cta a.btn, .nav-cta a[href*="assessment"]');
     if (quote) addLink(panel, quote.getAttribute('href'), labelOf(quote) || 'Request a quote', 'mnav-cta');
 

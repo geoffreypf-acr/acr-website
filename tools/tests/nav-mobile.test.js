@@ -79,6 +79,43 @@ console.log('the previously missing sections');
      'the same number of groups as the desktop nav (' + groups.join('/') + ' vs ' + deskGroups.join('/') + ')');
 }
 
+/* ---------- top-level items must all look the same ---------- */
+/* Guides and Why ACR are direct links rather than groups, and without the
+   m-direct class they fell through to no rule at all - body size, no divider -
+   next to 26px group headings. They looked like a different menu. */
+console.log('consistency of top-level items');
+{
+  ['about.html', 'index.html', 'referrals.html'].forEach(page => {
+    const { d } = boot(page);
+    const mnav = d.getElementById('mnav');
+    const topLinks = [...mnav.children].filter(el => el.tagName === 'A');
+    const unstyled = topLinks.filter(a => !/m-direct|mnav-cta/.test(a.className));
+    ok(unstyled.length === 0,
+       page + ': every top-level link carries a styling class (bare: '
+       + unstyled.map(a => a.textContent.trim()).join(', ') + ')');
+    const named = topLinks.filter(a => /m-direct/.test(a.className)).map(a => a.textContent.trim());
+    ok(named.length > 0, page + ': has top-level direct links (' + named.join(', ') + ')');
+  });
+
+  /* the CTA is deliberately the one exception */
+  const { d } = boot('about.html');
+  const cta = [...d.getElementById('mnav').children].filter(el => el.tagName === 'A' && /mnav-cta/.test(el.className));
+  ok(cta.length === 1, 'exactly one call-to-action, styled as a button not a menu row');
+}
+
+/* ---------- no phone number in the menu ---------- */
+console.log('no phone number');
+{
+  ['about.html', 'index.html', 'contact.html'].forEach(page => {
+    const { d } = boot(page);
+    const mnav = d.getElementById('mnav');
+    ok(mnav.querySelectorAll('a[href^="tel:"]').length === 0,
+       page + ': no tel: link in the menu - the fixed call bar already covers it');
+    ok(!/07468\s?844431/.test(mnav.textContent),
+       page + ': and the number does not appear as text either');
+  });
+}
+
 /* ---------- open and close ---------- */
 console.log('behaviour');
 {
