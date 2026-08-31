@@ -1268,6 +1268,14 @@ window.__mktStart = function(){
 
   load();
 };
+
+/* If the gate was already satisfied earlier this session, unlock() ran while the
+   first script block was parsing - before this block existed - so __mktStart was
+   undefined and was never called. The console then sat on its static "Loading
+   contacts..." placeholder forever, but only on a RETURN visit, which is why
+   typing the passcode always appeared to work.
+   The CRM has this same guard; copying its gate without it is what caused it. */
+if (!document.body.classList.contains('locked')) window.__mktStart();
 </script>
 <script src="console-nav.js"></script>
 </body>
