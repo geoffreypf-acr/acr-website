@@ -168,9 +168,12 @@ console.log('wire()-built forms (referral, trade, dealership)');
 {
   const CASES = [
     { page: 'referrals.html', form: 'referralForm', btn: 'referralSubmit', found: 'found-2',
+      /* "what they need" is a mandatory tick-box group, so it has to be ticked
+         or the form correctly refuses to send */
+      check: 'input[name="rfneed"]',
       fill: { 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
               'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
-              'rf-fveh':'Range Rover Sport','rf-need':'Dash camera','rf-reward':'Cash by bank transfer' } },
+              'rf-fveh':'Range Rover Sport','rf-reward':'Cash by bank transfer' } },
     { page: 'referrals.html', form: 'tradeForm', btn: 'tradeSubmit', found: 'found-1',
       fill: { 'tr-biz':'Acme Cars','tr-title':'Mr','tr-name':'Alex','tr-sur':'Marin',
               'tr-tel':'07700 900000','tr-email':'alex@example.com','tr-pc':'W11',
@@ -180,6 +183,7 @@ console.log('wire()-built forms (referral, trade, dealership)');
   CASES.forEach(c => {
     const { d, posts, opened } = boot(c.page, 'form.js');
     Object.entries(c.fill).forEach(([id, v]) => { const el = d.getElementById(id); if (el) el.value = v; });
+    if (c.check) { const cb = d.querySelector(c.check); if (cb) cb.checked = true; }
     const btn = d.getElementById(c.btn);
 
     // blocked while the answer is missing
@@ -202,28 +206,62 @@ console.log('wire()-built forms (referral, trade, dealership)');
        c.form + ': foundVia reaches the CRM (got ' + (crm && JSON.stringify(JSON.parse(crm.body).foundVia)) + ')');
   });
 
-  /* the referral form's new question */
+  /* the referral form's new question - tick boxes, so more than one can apply */
   const { d, posts, opened } = boot('referrals.html', 'form.js');
-  const need = d.getElementById('rf-need');
-  ok(!!need, 'the referral form asks what the referral needs');
-  ok([...need.options].map(o => o.textContent).join('|')
-      === 'Select\u2026|Vehicle security|Dash camera|Apple CarPlay & Android Auto|Other',
-     'with the four options, in order (got ' + [...need.options].map(o => o.textContent).join('|') + ')');
+  const boxes = [...d.querySelectorAll('input[name="rfneed"]')];
+  ok(boxes.length === 4, 'the referral form asks what they need, as four tick boxes (got ' + boxes.length + ')');
+  ok(boxes.map(b => b.value).join('|')
+      === 'Vehicle security|Dash camera|Apple CarPlay & Android Auto|Other',
+     'with the four options, in order (got ' + boxes.map(b => b.value).join('|') + ')');
+  ok(boxes.every(b => b.type === 'checkbox'), 'they are checkboxes, not a single-choice select');
 
   Object.entries({ 'rf-title':'Mr','rf-name':'Alex','rf-sur':'Marin','rf-tel':'07700 900000',
                    'rf-email':'alex@example.com','rf-fname':'Sam Reid','rf-ftel':'07700 900111',
                    'found-2':'Google' }).forEach(([id, v]) => { d.getElementById(id).value = v; });
   d.getElementById('referralSubmit').dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
   ok(opened.length === 0, 'it is mandatory - a referral with no idea what they want is a blind phone call');
+  ok(/what they need/i.test((d.getElementById('referralFormErr') || {}).textContent || ''),
+     'and the error names it rather than saying "at least one option"');
 
-  need.value = 'Apple CarPlay & Android Auto';
+  // two at once: someone can want security AND a dash camera
+  boxes[0].checked = true; boxes[1].checked = true;
   d.getElementById('referralSubmit').dispatchEvent(new d.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
   const wa = decodeURIComponent(opened[0] || '');
-  ok(/What they need: Apple CarPlay & Android Auto/.test(wa), 'it reaches the WhatsApp message');
+  ok(/What they need: Vehicle security, Dash camera/.test(wa),
+     'both ticks reach the WhatsApp message');
   const crm = posts.find(p => /script\.google\.com/.test(p.url));
-  ok(crm && JSON.parse(crm.body).details === 'Apple CarPlay & Android Auto',
-     'and lands in the CRM details column, where the card shows it (got '
+  ok(crm && JSON.parse(crm.body).details === 'Vehicle security, Dash camera',
+     'and land in the CRM details column, where the card shows them (got '
      + (crm && JSON.stringify(JSON.parse(crm.body).details)) + ')');
+}
+
+/* ---------- 5. the referral rewards are stated consistently ---------- */
+/* CarPlay and dash cameras now earn up to £20. That fact was stated in eleven
+   places on the page, one of which answered "No" to exactly this question, so
+   the risk here is a page that contradicts itself. */
+console.log('referral reward copy');
+{
+  const doc = new JSDOM(fs.readFileSync(path.join(REPO, 'referrals.html'), 'utf8')).window.document;
+  const text = doc.body.textContent.replace(/\s+/g, ' ');
+  ok(/up to £20/.test(text), 'the £20 tier is stated');
+  ok(/£50/.test(text) && /£75/.test(text), 'the security tiers are still stated');
+  ok(!/immobilisers? (installations? )?only/i.test(text),
+     'no surviving "trackers and immobilisers only" claim');
+  ok(!/no reward attached/i.test(text), 'the FAQ no longer says CarPlay earns nothing');
+  const faqYes = /Does the reward apply to CarPlay or dash cameras\?\s*Yes/.test(text);
+  ok(faqYes, 'the FAQ now answers Yes to CarPlay and dash cameras');
+  const dsc = doc.querySelector('meta[name=description]').content;
+  ok(/up to £20/.test(dsc) && dsc.length <= 175, 'the meta description mentions it and is within length (' + dsc.length + 'c)');
+
+  // schema must still match the visible answers
+  const norm = t => t.replace(/[‘’]/g, "'").replace(/[–—]/g, '-').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toLowerCase();
+  const body = norm(doc.body.textContent);
+  const sc = [...doc.querySelectorAll('script[type="application/ld+json"]')]
+               .map(x => JSON.parse(x.textContent)).find(o => o['@type'] === 'FAQPage');
+  const mismatched = sc.mainEntity.filter(q =>
+    !body.includes(norm(q.name)) || !body.includes(norm(q.acceptedAnswer.text).slice(0, 70)));
+  ok(mismatched.length === 0,
+     'the FAQ schema still matches the visible answers (' + mismatched.map(q => q.name).join('; ') + ')');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

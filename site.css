@@ -569,3 +569,9 @@ table.compare tbody tr:last-child td { border-bottom: none; }
 .hero-rating .rate-src:hover .tp-star svg { color: #00B67A; }
 .hero-rating .tp-star svg { width: 15px; height: 15px; color: #00B67A; }
 @media (max-width: 620px) { .hero-rating { flex-wrap: wrap; row-gap: 8px; gap: 9px; font-size: 12px; } .hero-rating .sep { display: none; } }
+
+/* Referral form: "what do they need" tick boxes. .mchip is already defined
+   above; these two rules just lay the group out and label it like a field. */
+.needs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.need-lbl { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.hintlet { display: block; font-size: 12px; color: var(--text-muted); margin-top: 9px; line-height: 1.5; }

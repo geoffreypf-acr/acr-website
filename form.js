@@ -958,7 +958,10 @@
         if (fields['Name']) fields['Name'] = personName(form) || fields['Name'];
         if (cfg.checkboxes) {
           var picked = Array.prototype.slice.call(form.querySelectorAll('input[name="' + cfg.checkboxes[0] + '"]:checked')).map(function (c) { return c.value; });
-          if (!picked.length) { err('Please choose at least one option.'); return; }
+          if (!picked.length) {
+            err('Please choose ' + (cfg.checkboxes[2] || 'at least one option') + '.');
+            return;
+          }
           fields[cfg.checkboxes[1]] = picked.join(', ');
         }
         var foundEl = form.querySelector('[data-found]');
@@ -983,10 +986,11 @@
       heading: 'New customer referral from acrautomobile.com',
       emailId: 'rf-email', telId: 'rf-tel',
       required: [['rf-name', 'your name'], ['rf-fname', 'the name of the person you are referring'],
-                 ['rf-ftel', 'their mobile number'], ['rf-need', 'what they need']],
+                 ['rf-ftel', 'their mobile number']],
       fields: [['rf-name', 'Name'], ['rf-tel', 'Mobile'], ['rf-email', 'Email'], ['rf-reg', 'Registration'],
                ['rf-fname', 'Referred name'], ['rf-ftel', 'Referred mobile'], ['rf-fveh', 'Referred vehicle'],
-               ['rf-need', 'What they need'], ['rf-reward', 'Reward preference']]
+               ['rf-reward', 'Reward preference']],
+      checkboxes: ['rfneed', 'What they need', 'what they need']
     });
 
     wire({

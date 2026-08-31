@@ -448,7 +448,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok(/£50/.test(body) && /£75/.test(body), 'it states both reward tiers');
     ok(/under £1,000/.test(body) && /£1,000 and above/.test(body), 'and the threshold that separates them');
     ok(/bank transfer/.test(body) && /completed/.test(body), 'and that it is paid after completion');
-    ok(/trackers and immobilisers only/i.test(body), 'and the limit on what qualifies');
+    ok(/up to £20/.test(body), 'and the CarPlay / dash camera tier');
+    ok(!/trackers and immobilisers only/i.test(body),
+       'and it does NOT still claim the reward is security-only');
     ok(/no limit on how many/i.test(body), 'and that referrals are uncapped');
     ok(/\{\{first\}\}/.test(body), 'personalised');
 
